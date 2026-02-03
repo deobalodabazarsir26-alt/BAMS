@@ -1,7 +1,6 @@
-
 /**
  * BLO Account Management System - Google Sheets Backend
- * Sheets expected: User, BLO_Account, Bank, Bank_Branch
+ * Sheets expected: User, BLO_Account, Bank, Bank_Branch, Department, Designation
  */
 
 const SPREADSHEET_ID = '199EWhTKl3E1MxSSL2-xFFIHrvhKJnADLCtLyWI4pSMc';
@@ -11,7 +10,9 @@ function doGet(e) {
     users: getSheetData('User'),
     accounts: getSheetData('BLO_Account'),
     banks: getSheetData('Bank'),
-    branches: getSheetData('Bank_Branch')
+    branches: getSheetData('Bank_Branch'),
+    departments: getSheetData('Department'),
+    designations: getSheetData('Designation')
   };
   
   return ContentService.createTextOutput(JSON.stringify(data))

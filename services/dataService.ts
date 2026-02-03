@@ -1,13 +1,19 @@
-
-import { User, BLOAccount, Bank, BankBranch } from '../types';
+import { User, BLOAccount, Bank, BankBranch, Department, Designation } from '../types';
 
 // The URL to your Google Apps Script Web App
 const API_URL = 'https://script.google.com/macros/s/AKfycby2mifGNWdyHQDV43od5I5wbEqeTnFEobreOi5eFaNX6RWke_UxdowWaQCLzeIw_PRu/exec';
 
-export const fetchAllData = async (): Promise<{ users: User[], accounts: BLOAccount[], banks: Bank[], branches: BankBranch[] }> => {
+export const fetchAllData = async (): Promise<{ 
+  users: User[], 
+  accounts: BLOAccount[], 
+  banks: Bank[], 
+  branches: BankBranch[],
+  departments: Department[],
+  designations: Designation[]
+}> => {
   if (!API_URL || API_URL.includes('YOUR_APPS_SCRIPT')) {
     console.error("API_URL not configured. Ensure the Web App is deployed and URL is pasted in dataService.ts");
-    return { users: [], accounts: [], banks: [], branches: [] };
+    return { users: [], accounts: [], banks: [], branches: [], departments: [], designations: [] };
   }
 
   try {

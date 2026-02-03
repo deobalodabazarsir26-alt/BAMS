@@ -1,4 +1,3 @@
-
 export enum UserType {
   ADMIN = 'admin',
   TEHSIL = 'tehsil'
@@ -32,9 +31,20 @@ export interface BankBranch {
   T_STMP_UPD: string;
 }
 
+export interface Department {
+  Dept_ID: string;
+  Dept_Name: string;
+}
+
+export interface Designation {
+  Desg_ID: string;
+  Desg_Name: string;
+  Dept_ID: string; // Required for cascading dropdown from Department
+}
+
 export interface BLOAccount {
   BLO_ID: string;
-  User_ID: string; // Mapping for tehsil filtration
+  User_ID: string;
   AC_No: string;
   AC_Name: string;
   Tehsil: string;
@@ -43,15 +53,15 @@ export interface BLOAccount {
   Part_Name_HI: string;
   BLO_Name: string;
   Gender: 'Male' | 'Female' | 'Other';
-  Designation: string;
-  Department: string;
+  Desg_ID: string;
+  Dept_ID: string;
   Mobile: string;
   EPIC: string;
   Bank_ID: string;
   Branch_ID: string;
   IFSC_Code: string;
   Account_Number: string;
-  Account_Passbook_Doc: string; // URL or Base64
+  Account_Passbook_Doc: string;
   Verified: 'yes' | 'no';
   T_STMP_ADD: string;
   T_STMP_UPD: string;
@@ -63,4 +73,6 @@ export interface AppState {
   banks: Bank[];
   branches: BankBranch[];
   users: User[];
+  departments: Department[];
+  designations: Designation[];
 }

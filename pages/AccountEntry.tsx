@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BLOAccount, User, UserType, Bank, BankBranch } from '../types';
+import { BLOAccount, User, UserType, Bank, BankBranch, Department, Designation } from '../types';
 import { searchIFSCViaGemini } from '../services/geminiService';
 
 interface AccountEntryProps {
@@ -7,35 +7,37 @@ interface AccountEntryProps {
   accounts: BLOAccount[];
   banks: Bank[];
   branches: BankBranch[];
+  departments: Department[];
+  designations: Designation[];
   onUpdate: (updated: BLOAccount, newBank?: Bank, newBranch?: BankBranch) => void;
 }
 
-const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, branches, onUpdate }) => {
+const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, branches, departments, designations, onUpdate }) => {
   const [selectedBLO, setSelectedBLO] = useState<BLOAccount | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [editForm, setEditForm] = useState<BLOAccount | null>(null);
   
-  // Local state for manual override names if Gemini fails or user wants to override
-  const [manualBankName, setManualBankName] = useState('');
-  const [manualBranchName, setManualBranchName] = useState('');
-  const [searchFeedback, setSearchFeedback] = useState<{ type: 'success' | 'error' | 'none', message: string }>({ type: 'none', message: '' });
+  const [searchFeedback, setSearchFeedback] = useState<{ type: 'success' | 'error' | 'info' | 'none', message: string }>({ type: 'none', message: '' });
+  const [stagedBank, setStagedBank] = useState<Bank | null>(null);
+  const [stagedBranch, setStagedBranch] = useState<BankBranch | null>(null);
 
-  // Track the last searched IFSC to avoid redundant auto-searches
   const lastSearchedRef = useRef<string>('');
 
   const filteredAccounts = user.User_Type === UserType.ADMIN 
     ? accounts 
-    : accounts.filter(a => a.User_ID === user.User_ID);
+    : accounts.filter(a => String(a.User_ID) === String(user.User_ID));
+
+  // Helper to get name from ID safely
+  const getDeptName = (id: any) => departments.find(d => String(d.Dept_ID).trim() === String(id).trim())?.Dept_Name || '---';
+  const getDesgName = (id: any) => designations.find(d => String(d.Desg_ID).trim() === String(id).trim())?.Desg_Name || '---';
 
   const handleEdit = (blo: BLOAccount) => {
     setSelectedBLO(blo);
     setEditForm({ ...blo });
     setSearchFeedback({ type: 'none', message: '' });
-    setManualBankName('');
-    setManualBranchName('');
+    setStagedBank(null);
+    setStagedBranch(null);
     lastSearchedRef.current = blo.IFSC_Code || '';
-    (window as any)._stagedBank = undefined;
-    (window as any)._stagedBranch = undefined;
   };
 
   const triggerIFSCSearch = async (ifscCode: string) => {
@@ -46,55 +48,73 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
 
     setIsSearching(true);
     setSearchFeedback({ type: 'none', message: '' });
+    setStagedBank(null);
+    setStagedBranch(null);
     lastSearchedRef.current = ifscCode;
     
+    const localBranch = branches.find(br => String(br.IFSC_Code).toUpperCase() === ifscCode.toUpperCase());
+    if (localBranch) {
+      setEditForm(prev => prev ? ({
+        ...prev,
+        Bank_ID: localBranch.Bank_ID,
+        Branch_ID: localBranch.Branch_ID
+      }) : null);
+      
+      setSearchFeedback({ type: 'success', message: 'Bank details found in current directory.' });
+      setIsSearching(false);
+      return;
+    }
+
     try {
       const result = await searchIFSCViaGemini(ifscCode);
       if (result) {
-        let bank = banks.find(b => b.Bank_Name.toLowerCase() === result.bankName.toLowerCase());
-        let branch = branches.find(br => br.IFSC_Code === result.ifsc);
-
-        const newBank: Bank | undefined = !bank ? {
+        const normalizedBankName = result.bankName.trim().toLowerCase();
+        let bank = banks.find(b => String(b.Bank_Name).toLowerCase() === normalizedBankName);
+        
+        const newBankObj: Bank | undefined = !bank ? {
           Bank_ID: 'B_' + Date.now(),
           Bank_Name: result.bankName,
           T_STMP_ADD: new Date().toISOString(),
           T_STMP_UPD: new Date().toISOString()
         } : undefined;
 
-        const targetBankId = bank ? bank.Bank_ID : newBank!.Bank_ID;
+        const targetBankId = bank ? bank.Bank_ID : newBankObj!.Bank_ID;
 
-        const newBranch: BankBranch | undefined = !branch ? {
+        const newBranchObj: BankBranch = {
           Branch_ID: 'BR_' + Date.now(),
           Branch_Name: result.branchName,
-          IFSC_Code: result.ifsc,
+          IFSC_Code: result.ifsc.toUpperCase(),
           Bank_ID: targetBankId,
           T_STMP_ADD: new Date().toISOString(),
           T_STMP_UPD: new Date().toISOString()
-        } : undefined;
+        };
 
         setEditForm(prev => prev ? ({
           ...prev,
-          IFSC_Code: result.ifsc, // Sync casing just in case
+          IFSC_Code: result.ifsc.toUpperCase(),
           Bank_ID: targetBankId,
-          Branch_ID: branch ? branch.Branch_ID : newBranch!.Branch_ID
+          Branch_ID: newBranchObj.Branch_ID
         }) : null);
 
-        (window as any)._stagedBank = newBank;
-        (window as any)._stagedBranch = newBranch;
-        setSearchFeedback({ type: 'success', message: 'Bank details found successfully.' });
+        if (newBankObj) setStagedBank(newBankObj);
+        setStagedBranch(newBranchObj);
+        
+        setSearchFeedback({ 
+          type: 'info', 
+          message: `Discovered new details! Bank: ${result.bankName}, Branch: ${result.branchName}. This will be added to the directory upon save.` 
+        });
       } else {
-        setSearchFeedback({ type: 'error', message: 'Could not find bank details automatically. You can enter details manually.' });
+        setSearchFeedback({ type: 'error', message: 'Could not find bank details for this IFSC code. Please verify the code.' });
       }
     } catch (err) {
-      setSearchFeedback({ type: 'error', message: 'Search failed. Manual entry is enabled.' });
+      setSearchFeedback({ type: 'error', message: 'Search failed. Please check your internet connection.' });
     } finally {
       setIsSearching(false);
     }
   };
 
-  // Automatic search when IFSC reaches 11 characters
   useEffect(() => {
-    if (editForm && editForm.IFSC_Code.length === 11 && editForm.IFSC_Code !== lastSearchedRef.current) {
+    if (editForm && String(editForm.IFSC_Code).length === 11 && String(editForm.IFSC_Code) !== lastSearchedRef.current) {
       triggerIFSCSearch(editForm.IFSC_Code);
     }
   }, [editForm?.IFSC_Code]);
@@ -110,6 +130,16 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
     }
   };
 
+  const handleDeptChange = (deptId: string) => {
+    if (editForm) {
+      setEditForm({
+        ...editForm,
+        Dept_ID: String(deptId).trim(),
+        Desg_ID: '' // Reset designation when department changes
+      });
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editForm) {
@@ -117,47 +147,25 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
         alert("Account Number and IFSC Code are mandatory.");
         return;
       }
-
-      let finalBank = (window as any)._stagedBank;
-      let finalBranch = (window as any)._stagedBranch;
-
-      // If search failed, allow user to save with manual values
-      if (!finalBank && manualBankName) {
-        finalBank = {
-          Bank_ID: 'B_' + Date.now(),
-          Bank_Name: manualBankName,
-          T_STMP_ADD: new Date().toISOString(),
-          T_STMP_UPD: new Date().toISOString()
-        };
-        editForm.Bank_ID = finalBank.Bank_ID;
-      }
-
-      if (!finalBranch && manualBranchName) {
-        finalBranch = {
-          Branch_ID: 'BR_' + Date.now(),
-          Branch_Name: manualBranchName,
-          IFSC_Code: editForm.IFSC_Code,
-          Bank_ID: editForm.Bank_ID,
-          T_STMP_ADD: new Date().toISOString(),
-          T_STMP_UPD: new Date().toISOString()
-        };
-        editForm.Branch_ID = finalBranch.Branch_ID;
-      }
-
-      // Even if Bank/Branch IDs are missing (search failed and no manual name given), 
-      // we still let it update to allow partial saves as requested.
-      onUpdate(editForm, finalBank, finalBranch);
+      onUpdate(editForm, stagedBank || undefined, stagedBranch || undefined);
       setSelectedBLO(null);
       setEditForm(null);
-      delete (window as any)._stagedBank;
-      delete (window as any)._stagedBranch;
+      setStagedBank(null);
+      setStagedBranch(null);
     }
   };
 
   if (selectedBLO && editForm) {
     const isLocked = editForm.Verified === 'yes' && user.User_Type !== UserType.ADMIN;
-    const currentBank = banks.find(b => b.Bank_ID === editForm.Bank_ID);
-    const currentBranch = branches.find(br => br.Branch_ID === editForm.Branch_ID);
+    
+    const currentBank = banks.find(b => String(b.Bank_ID).trim() === String(editForm.Bank_ID).trim()) || (stagedBank?.Bank_ID === editForm.Bank_ID ? stagedBank : null);
+    const currentBranch = branches.find(br => String(br.Branch_ID).trim() === String(editForm.Branch_ID).trim()) || (stagedBranch?.Branch_ID === editForm.Branch_ID ? stagedBranch : null);
+
+    // Filter designations based on selected Department ID using very safe comparison
+    const availableDesignations = designations.filter(d => 
+      editForm.Dept_ID && 
+      String(d.Dept_ID).trim() === String(editForm.Dept_ID).trim()
+    );
 
     return (
       <div className="container-fluid py-2">
@@ -178,12 +186,115 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                 </div>
               )}
 
-              {/* Priority Section: Bank Account Details */}
+              {/* 1. Assembly Details Section */}
+              <div className="card border-0 shadow-sm mb-4">
+                <div className="card-body p-4">
+                  <h6 className="text-primary fw-bold text-uppercase small mb-4 d-flex align-items-center">
+                    <i className="bi bi-geo-alt-fill me-2"></i>
+                    Assembly Details
+                  </h6>
+                  <div className="row g-3">
+                    <div className="col-md-2">
+                      <label className="form-label extra-small fw-bold text-muted">AC No.</label>
+                      <input type="text" disabled={isLocked} className="form-control form-control-sm" value={editForm.AC_No} onChange={e => setEditForm({...editForm, AC_No: e.target.value})} />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label extra-small fw-bold text-muted">AC Name</label>
+                      <input type="text" disabled={isLocked} className="form-control form-control-sm" value={editForm.AC_Name} onChange={e => setEditForm({...editForm, AC_Name: e.target.value})} />
+                    </div>
+                    <div className="col-md-4">
+                      <label className="form-label extra-small fw-bold text-muted">Tehsil</label>
+                      <input type="text" disabled={isLocked} className="form-control form-control-sm" value={editForm.Tehsil} onChange={e => setEditForm({...editForm, Tehsil: e.target.value})} />
+                    </div>
+                    <div className="col-md-2">
+                      <label className="form-label extra-small fw-bold text-muted">Part No.</label>
+                      <input type="text" disabled={isLocked} className="form-control form-control-sm" value={editForm.Part_No} onChange={e => setEditForm({...editForm, Part_No: e.target.value})} />
+                    </div>
+                    <div className="col-md-5">
+                      <label className="form-label extra-small fw-bold text-muted">Part Name (English)</label>
+                      <input type="text" disabled={isLocked} className="form-control form-control-sm" value={editForm.Part_Name_EN} onChange={e => setEditForm({...editForm, Part_Name_EN: e.target.value})} />
+                    </div>
+                    <div className="col-md-5">
+                      <label className="form-label extra-small fw-bold text-muted">Part Name (Hindi)</label>
+                      <input type="text" disabled={isLocked} className="form-control form-control-sm" value={editForm.Part_Name_HI} onChange={e => setEditForm({...editForm, Part_Name_HI: e.target.value})} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. BLO Details Section */}
+              <div className="card border-0 shadow-sm mb-4">
+                <div className="card-body p-4">
+                  <h6 className="text-primary fw-bold text-uppercase small mb-4 d-flex align-items-center">
+                    <i className="bi bi-person-badge-fill me-2"></i>
+                    BLO Details
+                  </h6>
+                  <div className="row g-3">
+                    <div className="col-md-6">
+                      <label className="form-label extra-small fw-bold text-muted">BLO Name</label>
+                      <input disabled={isLocked} type="text" className="form-control form-control-sm" value={editForm.BLO_Name} onChange={e => setEditForm({...editForm, BLO_Name: e.target.value})} />
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label extra-small fw-bold text-muted">Gender</label>
+                      <select disabled={isLocked} className="form-select form-select-sm" value={editForm.Gender} onChange={e => setEditForm({...editForm, Gender: e.target.value as any})}>
+                        <option>Male</option>
+                        <option>Female</option>
+                        <option>Other</option>
+                      </select>
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label extra-small fw-bold text-muted">Mobile</label>
+                      <input disabled={isLocked} type="text" className="form-control form-control-sm" value={editForm.Mobile} onChange={e => setEditForm({...editForm, Mobile: e.target.value})} />
+                    </div>
+                    
+                    {/* Cascading Dropdowns: Department First */}
+                    <div className="col-md-4">
+                      <label className="form-label extra-small fw-bold text-muted">Department</label>
+                      <select 
+                        disabled={isLocked} 
+                        className="form-select form-select-sm shadow-sm" 
+                        value={editForm.Dept_ID} 
+                        onChange={e => handleDeptChange(e.target.value)}
+                      >
+                        <option value="">Select Department</option>
+                        {departments.map(d => (
+                          <option key={String(d.Dept_ID)} value={String(d.Dept_ID)}>{d.Dept_Name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="col-md-4">
+                      <label className="form-label extra-small fw-bold text-muted">Designation</label>
+                      <select 
+                        disabled={isLocked || !editForm.Dept_ID} 
+                        className="form-select form-select-sm shadow-sm" 
+                        value={editForm.Desg_ID} 
+                        onChange={e => setEditForm({...editForm, Desg_ID: e.target.value})}
+                      >
+                        <option value="">{editForm.Dept_ID ? (availableDesignations.length > 0 ? 'Select Designation' : 'No Designations Found') : 'Select Department First'}</option>
+                        {availableDesignations.map(d => (
+                          <option key={String(d.Desg_ID)} value={String(d.Desg_ID)}>{d.Desg_Name}</option>
+                        ))}
+                      </select>
+                      {editForm.Dept_ID && availableDesignations.length === 0 && (
+                        <div className="extra-small text-danger mt-1">No designations mapped to this department ID in sheet.</div>
+                      )}
+                    </div>
+
+                    <div className="col-md-4">
+                      <label className="form-label extra-small fw-bold text-muted">EPIC (Voter ID)</label>
+                      <input disabled={isLocked} type="text" className="form-control form-control-sm" value={editForm.EPIC} onChange={e => setEditForm({...editForm, EPIC: e.target.value})} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Account Details Section */}
               <div className="card border-0 shadow-sm mb-5">
                 <div className="card-body p-4 bg-white border-start border-primary border-5 rounded-end">
                   <h6 className="text-primary fw-bold text-uppercase small mb-4 d-flex align-items-center">
                     <i className="bi bi-credit-card-2-front me-2"></i>
-                    Core Bank Account Information
+                    Account Details
                   </h6>
                   <div className="row g-4">
                     <div className="col-md-6">
@@ -193,7 +304,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                           <input 
                             disabled={isLocked} 
                             type="text" 
-                            className="form-control fw-bold text-primary" 
+                            className="form-control fw-bold text-primary text-uppercase" 
                             placeholder="Enter 11-digit IFSC" 
                             maxLength={11}
                             value={editForm.IFSC_Code} 
@@ -210,42 +321,24 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                         </div>
                         
                         {searchFeedback.type !== 'none' && (
-                          <div className={`mt-2 small fw-bold text-${searchFeedback.type === 'error' ? 'danger' : 'success'}`}>
+                          <div className={`mt-2 small fw-bold text-${searchFeedback.type === 'error' ? 'danger' : searchFeedback.type === 'info' ? 'primary' : 'success'}`}>
                             {searchFeedback.message}
                           </div>
                         )}
 
                         <div className="mt-3 p-3 rounded bg-white border border-info-subtle shadow-sm">
-                          <div className="small text-muted text-uppercase fw-bold mb-2" style={{fontSize: '0.65rem'}}>Directory Lookup:</div>
+                          <div className="small text-muted text-uppercase fw-bold mb-2" style={{fontSize: '0.65rem'}}>System Verification:</div>
                           
                           {(currentBank || currentBranch) ? (
                             <>
-                              <div className="fw-bold text-dark">{currentBank?.Bank_Name || '---'}</div>
+                              <div className="fw-bold text-dark d-flex align-items-center">
+                                {currentBank?.Bank_Name || '---'}
+                                {(stagedBank || stagedBranch) && <span className="ms-2 badge bg-info extra-small text-uppercase" style={{fontSize: '0.55rem'}}>New Discovery</span>}
+                              </div>
                               <div className="small text-secondary">{currentBranch?.Branch_Name || '---'}</div>
                             </>
                           ) : (
-                            <div className="text-muted italic small">No record found in sheets. Type names below if search failed.</div>
-                          )}
-
-                          {/* Manual entry fallback */}
-                          {!isLocked && (!currentBank || !currentBranch) && (
-                            <div className="mt-3 pt-3 border-top">
-                              <label className="form-label extra-small text-muted fw-bold">Manual Bank Details</label>
-                              <input 
-                                type="text" 
-                                className="form-control form-control-sm mb-2" 
-                                placeholder="Bank Name (e.g. State Bank of India)" 
-                                value={manualBankName} 
-                                onChange={e => setManualBankName(e.target.value)}
-                              />
-                              <input 
-                                type="text" 
-                                className="form-control form-control-sm" 
-                                placeholder="Branch Name (e.g. Main Branch Mumbai)" 
-                                value={manualBranchName} 
-                                onChange={e => setManualBranchName(e.target.value)}
-                              />
-                            </div>
+                            <div className="text-muted italic small">No record found. Type valid IFSC and click Search.</div>
                           )}
                         </div>
                       </div>
@@ -265,7 +358,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                       </div>
                     </div>
                     <div className="col-12">
-                      <label className="form-label small fw-bold text-secondary">Passbook Proof (Upload PDF or Image)</label>
+                      <label className="form-label small fw-bold text-secondary">Account Passbook Doc (Upload PDF/JPG)</label>
                       <input disabled={isLocked} type="file" className="form-control bg-white" onChange={handleFileChange} />
                       {editForm.Account_Passbook_Doc && (
                         <div className="mt-2">
@@ -277,64 +370,10 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                 </div>
               </div>
 
-              <div className="row g-4 mb-4">
-                <div className="col-md-6">
-                  <div className="card h-100 border-0 shadow-sm p-3">
-                    <h6 className="text-secondary fw-bold text-uppercase extra-small mb-3">BLO Identity</h6>
-                    <div className="row g-3">
-                      <div className="col-md-6">
-                        <label className="form-label small text-muted">Full Name</label>
-                        <input disabled={isLocked} type="text" className="form-control form-control-sm" value={editForm.BLO_Name} onChange={e => setEditForm({...editForm, BLO_Name: e.target.value})} />
-                      </div>
-                      <div className="col-md-6">
-                        <label className="form-label small text-muted">Mobile</label>
-                        <input disabled={isLocked} type="text" className="form-control form-control-sm" value={editForm.Mobile} onChange={e => setEditForm({...editForm, Mobile: e.target.value})} />
-                      </div>
-                      <div className="col-md-6">
-                        <label className="form-label small text-muted">EPIC (Voter ID)</label>
-                        <input disabled={isLocked} type="text" className="form-control form-control-sm" value={editForm.EPIC} onChange={e => setEditForm({...editForm, EPIC: e.target.value})} />
-                      </div>
-                      <div className="col-md-6">
-                        <label className="form-label small text-muted">Gender</label>
-                        <select disabled={isLocked} className="form-select form-select-sm" value={editForm.Gender} onChange={e => setEditForm({...editForm, Gender: e.target.value as any})}>
-                          <option>Male</option>
-                          <option>Female</option>
-                          <option>Other</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="col-md-6">
-                  <div className="card h-100 border-0 shadow-sm p-3">
-                    <h6 className="text-secondary fw-bold text-uppercase extra-small mb-3">Election Mapping</h6>
-                    <div className="row g-3">
-                      <div className="col-md-4">
-                        <label className="form-label small text-muted">AC No.</label>
-                        <input type="text" className="form-control form-control-sm bg-light" value={editForm.AC_No} disabled />
-                      </div>
-                      <div className="col-md-8">
-                        <label className="form-label small text-muted">AC Name</label>
-                        <input type="text" className="form-control form-control-sm bg-light" value={editForm.AC_Name} disabled />
-                      </div>
-                      <div className="col-md-4">
-                        <label className="form-label small text-muted">Part No.</label>
-                        <input type="text" className="form-control form-control-sm bg-light" value={editForm.Part_No} disabled />
-                      </div>
-                      <div className="col-md-8">
-                        <label className="form-label small text-muted">Tehsil</label>
-                        <input type="text" className="form-control form-control-sm bg-light" value={editForm.Tehsil} disabled />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <div className="mt-5 pt-4 border-top d-flex gap-3 justify-content-end">
                 <button type="button" onClick={() => setSelectedBLO(null)} className="btn btn-outline-secondary px-4">Cancel</button>
                 <button type="submit" disabled={isLocked} className="btn btn-primary btn-lg px-5 shadow-sm fw-bold">
-                  Update Record
+                  Save Changes
                 </button>
               </div>
             </form>
@@ -362,7 +401,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
             <thead className="table-dark">
               <tr>
                 <th className="py-3 px-4 fw-bold small">PART / AC</th>
-                <th className="py-3 px-4 fw-bold small">BLO NAME</th>
+                <th className="py-3 px-4 fw-bold small">BLO NAME / DEPT</th>
                 <th className="py-3 px-4 fw-bold small bg-primary-subtle text-primary">ACCOUNT NUMBER</th>
                 <th className="py-3 px-4 fw-bold small bg-primary-subtle text-primary">IFSC CODE</th>
                 <th className="py-3 px-4 fw-bold small text-center">STATUS</th>
@@ -377,8 +416,11 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                     <div className="extra-small text-muted">{blo.AC_Name}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="fw-semibold">{blo.BLO_Name}</div>
-                    <div className="small text-secondary">{blo.Mobile}</div>
+                    <div className="fw-semibold text-primary">{blo.BLO_Name}</div>
+                    <div className="extra-small fw-bold text-uppercase text-muted">
+                      {getDesgName(blo.Desg_ID)} | {getDeptName(blo.Dept_ID)}
+                    </div>
+                    <div className="extra-small text-secondary mt-1"><i className="bi bi-phone me-1"></i>{blo.Mobile}</div>
                   </td>
                   <td className="px-4 py-3 bg-light font-monospace">
                     {blo.Account_Number ? (

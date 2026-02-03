@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { User, BLOAccount, Bank, BankBranch, AppState } from './types';
+import { User, BLOAccount, Bank, BankBranch, AppState, Department, Designation } from './types';
 import { fetchAllData, updateAccountOnSheet, updateVerificationOnSheet, addBankOnSheet, addBranchOnSheet } from './services/dataService';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -14,7 +13,9 @@ const App: React.FC = () => {
     accounts: [],
     banks: [],
     branches: [],
-    users: []
+    users: [],
+    departments: [],
+    designations: []
   });
   
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -110,6 +111,8 @@ const App: React.FC = () => {
             accounts={state.accounts} 
             banks={state.banks} 
             branches={state.branches}
+            departments={state.departments}
+            designations={state.designations}
             onUpdate={updateAccount}
           />
         );
@@ -120,6 +123,8 @@ const App: React.FC = () => {
             accounts={state.accounts}
             banks={state.banks} 
             branches={state.branches}
+            departments={state.departments}
+            designations={state.designations}
             onVerify={handleVerify}
           />
         );

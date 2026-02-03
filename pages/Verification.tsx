@@ -1,22 +1,23 @@
-
 import React, { useState } from 'react';
-import { BLOAccount, User, UserType, Bank, BankBranch } from '../types';
+import { BLOAccount, User, UserType, Bank, BankBranch, Department, Designation } from '../types';
 
 interface VerificationProps {
   user: User;
   accounts: BLOAccount[];
   banks: Bank[];
   branches: BankBranch[];
+  departments: Department[];
+  designations: Designation[];
   onVerify: (bloId: string, verified: 'yes' | 'no') => void;
 }
 
-const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, branches, onVerify }) => {
+const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, branches, departments, designations, onVerify }) => {
   const [selectedBLO, setSelectedBLO] = useState<BLOAccount | null>(null);
   const isAdmin = user.User_Type === UserType.ADMIN;
   
   const filteredAccounts = user.User_Type === UserType.ADMIN 
     ? accounts 
-    : accounts.filter(a => a.User_ID === user.User_ID);
+    : accounts.filter(a => String(a.User_ID) === String(user.User_ID));
 
   const handleVerifyToggle = (blo: BLOAccount) => {
     if (blo.Verified === 'yes' && !isAdmin) {
@@ -135,12 +136,21 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
                           <div className="h6 fw-semibold text-secondary mb-0">{selectedBLO.EPIC || '---'}</div>
                         </div>
                         <div className="col-12 mt-3 pt-3 border-top">
-                          <label className="extra-small text-muted text-uppercase fw-bold" style={{fontSize: '0.65rem'}}>Bank & Branch</label>
+                          <label className="extra-small text-muted text-uppercase fw-bold" style={{fontSize: '0.65rem'}}>Personnel Info</label>
                           <div className="fw-bold text-dark mb-1">
-                            {banks.find(b => b.Bank_ID === selectedBLO.Bank_ID)?.Bank_Name || 'Unknown Bank'}
+                            {designations.find(d => String(d.Desg_ID) === String(selectedBLO.Desg_ID))?.Desg_Name || 'Unknown Designation'}
                           </div>
                           <div className="small text-secondary">
-                            {branches.find(br => br.Branch_ID === selectedBLO.Branch_ID)?.Branch_Name || 'Unknown Branch'}
+                            {departments.find(d => String(d.Dept_ID) === String(selectedBLO.Dept_ID))?.Dept_Name || 'Unknown Department'}
+                          </div>
+                        </div>
+                        <div className="col-12 mt-3 pt-3 border-top">
+                          <label className="extra-small text-muted text-uppercase fw-bold" style={{fontSize: '0.65rem'}}>Bank & Branch</label>
+                          <div className="fw-bold text-dark mb-1">
+                            {banks.find(b => String(b.Bank_ID) === String(selectedBLO.Bank_ID))?.Bank_Name || 'Unknown Bank'}
+                          </div>
+                          <div className="small text-secondary">
+                            {branches.find(br => String(br.Branch_ID) === String(selectedBLO.Branch_ID))?.Branch_Name || 'Unknown Branch'}
                           </div>
                         </div>
                       </div>
