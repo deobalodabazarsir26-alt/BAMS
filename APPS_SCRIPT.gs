@@ -4,6 +4,7 @@
  */
 
 const SPREADSHEET_ID = '199EWhTKl3E1MxSSL2-xFFIHrvhKJnADLCtLyWI4pSMc';
+const TARGET_FOLDER_ID = '1kOZQqX8bBNLswS-ogfmmL0-dnvPjODPv';
 
 function doGet(e) {
   const data = {
@@ -51,6 +52,8 @@ function getSheetData(sheetName) {
   if (!sheet) return [];
   
   const values = sheet.getDataRange().getValues();
+  if (values.length === 0) return [];
+  
   const headers = values[0];
   const data = [];
   
@@ -78,6 +81,30 @@ function updateRecord(sheetName, idColumnName, idValue, updateObj) {
       // Update timestamps
       updateObj['T_STMP_UPD'] = new Date().toISOString();
       
+      // Special handling for file upload to Google Drive
+      if (updateObj['Account_Passbook_Doc'] && updateObj['Account_Passbook_Doc'].startsWith('data:')) {
+        // Construct filename: AC_No + Part_No + Mobile
+        const getValFromSource = (key) => {
+          if (updateObj[key] !== undefined && updateObj[key] !== null && updateObj[key] !== '') {
+            return updateObj[key];
+          }
+          const colIdx = headers.indexOf(key);
+          return colIdx !== -1 ? data[i][colIdx] : '';
+        };
+
+        const acNo = getValFromSource('AC_No');
+        const partNo = getValFromSource('Part_No');
+        const mobile = getValFromSource('Mobile');
+        const fileName = `${acNo}_${partNo}_${mobile}`;
+        
+        try {
+          const driveUrl = uploadBase64ToDrive(updateObj['Account_Passbook_Doc'], fileName);
+          updateObj['Account_Passbook_Doc'] = driveUrl; // Replace base64 with Drive URL
+        } catch (e) {
+          console.error("Drive upload failed:", e);
+        }
+      }
+      
       for (let key in updateObj) {
         const colIndex = headers.indexOf(key);
         if (colIndex !== -1) {
@@ -88,6 +115,30 @@ function updateRecord(sheetName, idColumnName, idValue, updateObj) {
     }
   }
   return { success: false, message: 'Record not found' };
+}
+
+function uploadBase64ToDrive(base64Data, fileName) {
+  // Extract parts from data URI
+  const split = base64Data.split(',');
+  const contentTypeMatch = split[0].match(/:(.*?);/);
+  const contentType = contentTypeMatch ? contentTypeMatch[1] : 'application/octet-stream';
+  const rawData = Utilities.base64Decode(split[1]);
+  
+  // Append extension based on content type
+  let extension = '';
+  if (contentType === 'application/pdf') extension = '.pdf';
+  else if (contentType.includes('image/jpeg')) extension = '.jpg';
+  else if (contentType.includes('image/png')) extension = '.png';
+  
+  const blob = Utilities.newBlob(rawData, contentType, fileName + extension);
+  
+  // Get the target folder by ID
+  const folder = DriveApp.getFolderById(TARGET_FOLDER_ID);
+  
+  const file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  
+  return file.getUrl();
 }
 
 function addRecord(sheetName, recordObj) {

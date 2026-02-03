@@ -17,7 +17,19 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
   
   const filteredAccounts = user.User_Type === UserType.ADMIN 
     ? accounts 
-    : accounts.filter(a => String(a.User_ID) === String(user.User_ID));
+    : accounts.filter(a => String(a.User_ID).trim() === String(user.User_ID).trim());
+
+  const getEntityLabel = (obj: any, preferredKeys: string[]): string => {
+    if (!obj) return '---';
+    for (const key of preferredKeys) {
+      if (obj[key] !== undefined && obj[key] !== null && String(obj[key]).trim() !== '') {
+        return String(obj[key]).trim();
+      }
+    }
+    const keys = Object.keys(obj);
+    const fallbackKey = keys.find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('designation') || k.toLowerCase().includes('department'));
+    return fallbackKey ? String(obj[fallbackKey]) : 'Unknown';
+  };
 
   const handleVerifyToggle = (blo: BLOAccount) => {
     if (blo.Verified === 'yes' && !isAdmin) {
@@ -29,6 +41,45 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
     if (selectedBLO?.BLO_ID === blo.BLO_ID) {
       setSelectedBLO({...blo, Verified: nextState});
     }
+  };
+
+  const renderDocumentViewer = (doc: string) => {
+    if (!doc) return (
+      <div className="text-center text-muted m-auto p-5">
+        <i className="bi bi-file-earmark-excel fs-1 mb-3 d-block"></i>
+        <p className="fw-bold">No Proof Document Uploaded</p>
+        <p className="small">Please ask the Tehsil user to upload the document before verification.</p>
+      </div>
+    );
+
+    // If it's a Drive URL
+    if (doc.includes('drive.google.com')) {
+      // Try to convert to preview mode if it's a direct view link
+      const previewUrl = doc.replace('/view?usp=sharing', '/preview').replace('/view', '/preview');
+      return (
+        <iframe src={previewUrl} className="w-100 h-100 rounded shadow" frameBorder="0"></iframe>
+      );
+    }
+
+    // Base64 logic
+    if (doc.startsWith('data:application/pdf')) {
+      return <embed src={doc} className="w-100 h-100 rounded shadow" />;
+    } else if (doc.startsWith('data:image')) {
+      return (
+        <img 
+          src={doc} 
+          alt="Passbook" 
+          className="img-fluid rounded shadow-lg m-auto" 
+          style={{maxHeight: '90%'}}
+        />
+      );
+    }
+
+    return (
+      <div className="text-center p-4">
+        <p>Document format not directly viewable. <a href={doc} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">Open in New Tab</a></p>
+      </div>
+    );
   };
 
   return (
@@ -77,35 +128,16 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
               </div>
               
               <div className="row g-0 flex-grow-1">
-                {/* PDF/Image Preview */}
                 <div className="col-12 col-md-7 bg-dark bg-opacity-10 d-flex flex-column border-end" style={{ minHeight: '600px' }}>
                   <div className="p-3 bg-secondary bg-opacity-25 fw-bold small text-dark text-uppercase border-bottom d-flex justify-content-between">
                     <span>Passbook / Cheque Image</span>
                     <span className="text-primary"><i className="bi bi-zoom-in me-1"></i> Document View</span>
                   </div>
                   <div className="flex-grow-1 p-2 d-flex align-items-start justify-content-center overflow-auto bg-slate-900">
-                    {selectedBLO.Account_Passbook_Doc ? (
-                      selectedBLO.Account_Passbook_Doc.startsWith('data:application/pdf') ? (
-                        <embed src={selectedBLO.Account_Passbook_Doc} className="w-100 h-100 rounded shadow" />
-                      ) : (
-                        <img 
-                          src={selectedBLO.Account_Passbook_Doc} 
-                          alt="Passbook" 
-                          className="img-fluid rounded shadow-lg m-auto" 
-                          style={{maxHeight: '90%'}}
-                        />
-                      )
-                    ) : (
-                      <div className="text-center text-muted m-auto p-5">
-                        <i className="bi bi-file-earmark-excel fs-1 mb-3 d-block"></i>
-                        <p className="fw-bold">No Proof Document Uploaded</p>
-                        <p className="small">Please ask the Tehsil user to upload the document before verification.</p>
-                      </div>
-                    )}
+                    {renderDocumentViewer(selectedBLO.Account_Passbook_Doc)}
                   </div>
                 </div>
 
-                {/* Data Review */}
                 <div className="col-12 col-md-5 d-flex flex-column p-4 bg-white">
                   <div className="mb-4">
                     <h6 className="fw-bold text-uppercase text-muted extra-small mb-3">Compare With Document</h6>
@@ -138,19 +170,19 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
                         <div className="col-12 mt-3 pt-3 border-top">
                           <label className="extra-small text-muted text-uppercase fw-bold" style={{fontSize: '0.65rem'}}>Personnel Info</label>
                           <div className="fw-bold text-dark mb-1">
-                            {designations.find(d => String(d.Desg_ID) === String(selectedBLO.Desg_ID))?.Desg_Name || 'Unknown Designation'}
+                            {getEntityLabel(designations.find(d => String(d.Desg_ID).trim() === String(selectedBLO.Desg_ID).trim()), ['Desg_Name', 'Designation', 'Name'])}
                           </div>
                           <div className="small text-secondary">
-                            {departments.find(d => String(d.Dept_ID) === String(selectedBLO.Dept_ID))?.Dept_Name || 'Unknown Department'}
+                            {getEntityLabel(departments.find(d => String(d.Dept_ID).trim() === String(selectedBLO.Dept_ID).trim()), ['Dept_Name', 'Department', 'Name'])}
                           </div>
                         </div>
                         <div className="col-12 mt-3 pt-3 border-top">
                           <label className="extra-small text-muted text-uppercase fw-bold" style={{fontSize: '0.65rem'}}>Bank & Branch</label>
                           <div className="fw-bold text-dark mb-1">
-                            {banks.find(b => String(b.Bank_ID) === String(selectedBLO.Bank_ID))?.Bank_Name || 'Unknown Bank'}
+                            {banks.find(b => String(b.Bank_ID).trim() === String(selectedBLO.Bank_ID).trim())?.Bank_Name || 'Unknown Bank'}
                           </div>
                           <div className="small text-secondary">
-                            {branches.find(br => String(br.Branch_ID) === String(selectedBLO.Branch_ID))?.Branch_Name || 'Unknown Branch'}
+                            {branches.find(br => String(br.Branch_ID).trim() === String(selectedBLO.Branch_ID).trim())?.Branch_Name || 'Unknown Branch'}
                           </div>
                         </div>
                       </div>

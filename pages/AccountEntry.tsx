@@ -25,11 +25,30 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
 
   const filteredAccounts = user.User_Type === UserType.ADMIN 
     ? accounts 
-    : accounts.filter(a => String(a.User_ID) === String(user.User_ID));
+    : accounts.filter(a => String(a.User_ID).trim() === String(user.User_ID).trim());
 
-  // Helper to get name from ID safely
-  const getDeptName = (id: any) => departments.find(d => String(d.Dept_ID).trim() === String(id).trim())?.Dept_Name || '---';
-  const getDesgName = (id: any) => designations.find(d => String(d.Desg_ID).trim() === String(id).trim())?.Desg_Name || '---';
+  const getEntityLabel = (obj: any, preferredKeys: string[]): string => {
+    if (!obj) return '---';
+    for (const key of preferredKeys) {
+      if (obj[key] !== undefined && obj[key] !== null && String(obj[key]).trim() !== '') {
+        return String(obj[key]).trim();
+      }
+    }
+    const keys = Object.keys(obj);
+    const fallbackKey = keys.find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('designation') || k.toLowerCase().includes('department'));
+    if (fallbackKey) return String(obj[fallbackKey]);
+    return 'Unknown';
+  };
+
+  const getDeptName = (id: any) => {
+    const dept = departments.find(d => String(d.Dept_ID).trim() === String(id).trim());
+    return getEntityLabel(dept, ['Dept_Name', 'Department', 'Name']);
+  };
+
+  const getDesgName = (id: any) => {
+    const desg = designations.find(d => String(d.Desg_ID).trim() === String(id).trim());
+    return getEntityLabel(desg, ['Desg_Name', 'Designation', 'Name']);
+  };
 
   const handleEdit = (blo: BLOAccount) => {
     setSelectedBLO(blo);
@@ -135,7 +154,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
       setEditForm({
         ...editForm,
         Dept_ID: String(deptId).trim(),
-        Desg_ID: '' // Reset designation when department changes
+        Desg_ID: '' 
       });
     }
   };
@@ -161,7 +180,6 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
     const currentBank = banks.find(b => String(b.Bank_ID).trim() === String(editForm.Bank_ID).trim()) || (stagedBank?.Bank_ID === editForm.Bank_ID ? stagedBank : null);
     const currentBranch = branches.find(br => String(br.Branch_ID).trim() === String(editForm.Branch_ID).trim()) || (stagedBranch?.Branch_ID === editForm.Branch_ID ? stagedBranch : null);
 
-    // Filter designations based on selected Department ID using very safe comparison
     const availableDesignations = designations.filter(d => 
       editForm.Dept_ID && 
       String(d.Dept_ID).trim() === String(editForm.Dept_ID).trim()
@@ -186,37 +204,37 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                 </div>
               )}
 
-              {/* 1. Assembly Details Section */}
-              <div className="card border-0 shadow-sm mb-4">
+              {/* 1. Assembly Details Section - VIEW ONLY */}
+              <div className="card border-0 shadow-sm mb-4 bg-light">
                 <div className="card-body p-4">
-                  <h6 className="text-primary fw-bold text-uppercase small mb-4 d-flex align-items-center">
+                  <h6 className="text-secondary fw-bold text-uppercase small mb-4 d-flex align-items-center">
                     <i className="bi bi-geo-alt-fill me-2"></i>
-                    Assembly Details
+                    Assembly Details (View Only)
                   </h6>
                   <div className="row g-3">
                     <div className="col-md-2">
                       <label className="form-label extra-small fw-bold text-muted">AC No.</label>
-                      <input type="text" disabled={isLocked} className="form-control form-control-sm" value={editForm.AC_No} onChange={e => setEditForm({...editForm, AC_No: e.target.value})} />
+                      <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.AC_No} />
                     </div>
                     <div className="col-md-6">
                       <label className="form-label extra-small fw-bold text-muted">AC Name</label>
-                      <input type="text" disabled={isLocked} className="form-control form-control-sm" value={editForm.AC_Name} onChange={e => setEditForm({...editForm, AC_Name: e.target.value})} />
+                      <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.AC_Name} />
                     </div>
                     <div className="col-md-4">
                       <label className="form-label extra-small fw-bold text-muted">Tehsil</label>
-                      <input type="text" disabled={isLocked} className="form-control form-control-sm" value={editForm.Tehsil} onChange={e => setEditForm({...editForm, Tehsil: e.target.value})} />
+                      <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.Tehsil} />
                     </div>
                     <div className="col-md-2">
                       <label className="form-label extra-small fw-bold text-muted">Part No.</label>
-                      <input type="text" disabled={isLocked} className="form-control form-control-sm" value={editForm.Part_No} onChange={e => setEditForm({...editForm, Part_No: e.target.value})} />
+                      <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.Part_No} />
                     </div>
                     <div className="col-md-5">
                       <label className="form-label extra-small fw-bold text-muted">Part Name (English)</label>
-                      <input type="text" disabled={isLocked} className="form-control form-control-sm" value={editForm.Part_Name_EN} onChange={e => setEditForm({...editForm, Part_Name_EN: e.target.value})} />
+                      <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.Part_Name_EN} />
                     </div>
                     <div className="col-md-5">
                       <label className="form-label extra-small fw-bold text-muted">Part Name (Hindi)</label>
-                      <input type="text" disabled={isLocked} className="form-control form-control-sm" value={editForm.Part_Name_HI} onChange={e => setEditForm({...editForm, Part_Name_HI: e.target.value})} />
+                      <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.Part_Name_HI} />
                     </div>
                   </div>
                 </div>
@@ -247,7 +265,6 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                       <input disabled={isLocked} type="text" className="form-control form-control-sm" value={editForm.Mobile} onChange={e => setEditForm({...editForm, Mobile: e.target.value})} />
                     </div>
                     
-                    {/* Cascading Dropdowns: Department First */}
                     <div className="col-md-4">
                       <label className="form-label extra-small fw-bold text-muted">Department</label>
                       <select 
@@ -258,7 +275,9 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                       >
                         <option value="">Select Department</option>
                         {departments.map(d => (
-                          <option key={String(d.Dept_ID)} value={String(d.Dept_ID)}>{d.Dept_Name}</option>
+                          <option key={String(d.Dept_ID)} value={String(d.Dept_ID)}>
+                            {getEntityLabel(d, ['Dept_Name', 'Department', 'Name'])}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -273,12 +292,11 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                       >
                         <option value="">{editForm.Dept_ID ? (availableDesignations.length > 0 ? 'Select Designation' : 'No Designations Found') : 'Select Department First'}</option>
                         {availableDesignations.map(d => (
-                          <option key={String(d.Desg_ID)} value={String(d.Desg_ID)}>{d.Desg_Name}</option>
+                          <option key={String(d.Desg_ID)} value={String(d.Desg_ID)}>
+                            {getEntityLabel(d, ['Desg_Name', 'Designation', 'Name'])}
+                          </option>
                         ))}
                       </select>
-                      {editForm.Dept_ID && availableDesignations.length === 0 && (
-                        <div className="extra-small text-danger mt-1">No designations mapped to this department ID in sheet.</div>
-                      )}
                     </div>
 
                     <div className="col-md-4">
@@ -361,8 +379,11 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                       <label className="form-label small fw-bold text-secondary">Account Passbook Doc (Upload PDF/JPG)</label>
                       <input disabled={isLocked} type="file" className="form-control bg-white" onChange={handleFileChange} />
                       {editForm.Account_Passbook_Doc && (
-                        <div className="mt-2">
-                          <span className="badge bg-success px-3 py-2"><i className="bi bi-check2-circle me-1"></i> Document Attached</span>
+                        <div className="mt-2 d-flex align-items-center gap-2">
+                          <span className="badge bg-success px-3 py-2"><i className="bi bi-check2-circle me-1"></i> Document Ready</span>
+                          {editForm.Account_Passbook_Doc.startsWith('http') && (
+                            <a href={editForm.Account_Passbook_Doc} target="_blank" rel="noreferrer" className="btn btn-link btn-sm text-decoration-none p-0">View Current</a>
+                          )}
                         </div>
                       )}
                     </div>
@@ -373,7 +394,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
               <div className="mt-5 pt-4 border-top d-flex gap-3 justify-content-end">
                 <button type="button" onClick={() => setSelectedBLO(null)} className="btn btn-outline-secondary px-4">Cancel</button>
                 <button type="submit" disabled={isLocked} className="btn btn-primary btn-lg px-5 shadow-sm fw-bold">
-                  Save Changes
+                  Save & Upload to Drive
                 </button>
               </div>
             </form>
@@ -420,7 +441,6 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                     <div className="extra-small fw-bold text-uppercase text-muted">
                       {getDesgName(blo.Desg_ID)} | {getDeptName(blo.Dept_ID)}
                     </div>
-                    <div className="extra-small text-secondary mt-1"><i className="bi bi-phone me-1"></i>{blo.Mobile}</div>
                   </td>
                   <td className="px-4 py-3 bg-light font-monospace">
                     {blo.Account_Number ? (
