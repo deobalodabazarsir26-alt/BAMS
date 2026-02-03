@@ -1,20 +1,20 @@
 
 import { User, BLOAccount, Bank, BankBranch } from '../types';
 
-// IMPORTANT: Replace this with your actual Google Apps Script Web App URL after deployment
+// The URL to your Google Apps Script Web App
 const API_URL = 'https://script.google.com/macros/s/AKfycby2mifGNWdyHQDV43od5I5wbEqeTnFEobreOi5eFaNX6RWke_UxdowWaQCLzeIw_PRu/exec';
 
 export const fetchAllData = async (): Promise<{ users: User[], accounts: BLOAccount[], banks: Bank[], branches: BankBranch[] }> => {
-  if (!API_URL) {
-    console.warn("API_URL not configured. Please deploy Apps Script and update dataService.ts");
-    // Fallback to empty or mock if needed for local dev
+  if (!API_URL || API_URL.includes('YOUR_APPS_SCRIPT')) {
+    console.error("API_URL not configured. Ensure the Web App is deployed and URL is pasted in dataService.ts");
     return { users: [], accounts: [], banks: [], branches: [] };
   }
 
   try {
     const response = await fetch(API_URL);
-    if (!response.ok) throw new Error('Failed to fetch data from Google Sheets');
-    return await response.json();
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const data = await response.json();
+    return data;
   } catch (error) {
     console.error("Fetch Data Error:", error);
     throw error;
@@ -25,7 +25,6 @@ export const updateAccountOnSheet = async (account: BLOAccount): Promise<boolean
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
-      redirect: 'follow',
       body: JSON.stringify({
         action: 'updateAccount',
         payload: account
@@ -43,7 +42,6 @@ export const updateVerificationOnSheet = async (bloId: string, verified: 'yes' |
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
-      redirect: 'follow',
       body: JSON.stringify({
         action: 'verifyAccount',
         payload: { BLO_ID: bloId, Verified: verified }
@@ -61,7 +59,6 @@ export const addBankOnSheet = async (bank: Bank): Promise<boolean> => {
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
-      redirect: 'follow',
       body: JSON.stringify({
         action: 'addBank',
         payload: bank
@@ -78,7 +75,6 @@ export const addBranchOnSheet = async (branch: BankBranch): Promise<boolean> => 
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
-      redirect: 'follow',
       body: JSON.stringify({
         action: 'addBranch',
         payload: branch
