@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BLOAccount, User, UserType, Bank, BankBranch, Department, Designation } from '../types';
+import { searchIFSCViaGemini } from '../services/geminiService';
 
 interface VerificationProps {
   user: User;
@@ -9,10 +10,16 @@ interface VerificationProps {
   departments: Department[];
   designations: Designation[];
   onVerify: (bloId: string, verified: 'yes' | 'no') => void;
+  onUpdate?: (updated: BLOAccount, newBank?: Bank, newBranch?: BankBranch) => void;
 }
 
-const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, branches, departments, designations, onVerify }) => {
+const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, branches, departments, designations, onVerify, onUpdate }) => {
   const [selectedBLO, setSelectedBLO] = useState<BLOAccount | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<BLOAccount | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const lastSearchedRef = useRef<string>('');
+  
   const isAdmin = user.User_Type === UserType.ADMIN;
   
   const filteredAccounts = user.User_Type === UserType.ADMIN 
@@ -43,41 +50,60 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
     }
   };
 
+  const startEditing = () => {
+    if (!selectedBLO) return;
+    setEditForm({ ...selectedBLO });
+    lastSearchedRef.current = selectedBLO.IFSC_Code || '';
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editForm || !onUpdate) return;
+    onUpdate(editForm);
+    setSelectedBLO(editForm);
+    setIsEditing(false);
+  };
+
+  const triggerIFSCSearch = async (ifscCode: string) => {
+    if (!ifscCode || ifscCode.length !== 11) return;
+    setIsSearching(true);
+    lastSearchedRef.current = ifscCode;
+    const result = await searchIFSCViaGemini(ifscCode);
+    if (result && editForm) {
+      setEditForm({
+        ...editForm,
+        IFSC_Code: result.ifsc.toUpperCase()
+      });
+    }
+    setIsSearching(false);
+  };
+
   const renderDocumentViewer = (doc: string) => {
     if (!doc) return (
       <div className="text-center text-muted m-auto p-5">
         <i className="bi bi-file-earmark-excel fs-1 mb-3 d-block"></i>
         <p className="fw-bold">No Proof Document Uploaded</p>
-        <p className="small">Please ask the Tehsil user to upload the document before verification.</p>
       </div>
     );
 
-    // If it's a Drive URL
     if (doc.includes('drive.google.com')) {
-      // Try to convert to preview mode if it's a direct view link
       const previewUrl = doc.replace('/view?usp=sharing', '/preview').replace('/view', '/preview');
       return (
         <iframe src={previewUrl} className="w-100 h-100 rounded shadow" frameBorder="0"></iframe>
       );
     }
 
-    // Base64 logic
     if (doc.startsWith('data:application/pdf')) {
       return <embed src={doc} className="w-100 h-100 rounded shadow" />;
     } else if (doc.startsWith('data:image')) {
       return (
-        <img 
-          src={doc} 
-          alt="Passbook" 
-          className="img-fluid rounded shadow-lg m-auto" 
-          style={{maxHeight: '90%'}}
-        />
+        <img src={doc} alt="Passbook" className="img-fluid rounded shadow-lg m-auto" style={{maxHeight: '90%'}} />
       );
     }
 
     return (
       <div className="text-center p-4">
-        <p>Document format not directly viewable. <a href={doc} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">Open in New Tab</a></p>
+        <p>Format not viewable. <a href={doc} target="_blank" rel="noreferrer">Open Link</a></p>
       </div>
     );
   };
@@ -90,19 +116,17 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
             <h3 className="fw-bold mb-0">Verification Queue</h3>
           </div>
           <div className="card shadow-sm border-0 overflow-hidden">
-            <div className="list-group list-group-flush scrollable-list" style={{maxHeight: '75vh', overflowY: 'auto'}}>
-              {filteredAccounts.length === 0 && <div className="p-5 text-center text-muted">No records found.</div>}
+            <div className="list-group list-group-flush" style={{maxHeight: '75vh', overflowY: 'auto'}}>
               {filteredAccounts.map(blo => (
                 <button
                   key={blo.BLO_ID}
-                  onClick={() => setSelectedBLO(blo)}
+                  onClick={() => { setSelectedBLO(blo); setIsEditing(false); }}
                   className={`list-group-item list-group-item-action p-3 border-0 border-bottom ${selectedBLO?.BLO_ID === blo.BLO_ID ? 'bg-primary-subtle' : ''}`}
                 >
                   <div className="d-flex justify-content-between align-items-start">
-                    <div className="overflow-hidden">
-                      <h6 className="fw-bold mb-1 text-truncate">{blo.BLO_Name}</h6>
-                      <p className="small text-muted mb-1 text-truncate">P-{blo.Part_No} | {blo.AC_Name}</p>
-                      <div className="font-monospace small text-primary">{blo.Account_Number || '---'}</div>
+                    <div>
+                      <h6 className="fw-bold mb-1">{blo.BLO_Name}</h6>
+                      <p className="small text-muted mb-1">P-{blo.Part_No} | {blo.AC_Name}</p>
                     </div>
                     {blo.Verified === 'yes' ? (
                       <span className="badge bg-success rounded-circle p-1"><i className="bi bi-check text-white"></i></span>
@@ -120,120 +144,124 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
           <div className="col-12 col-lg-8">
             <div className="card shadow-lg border-0 h-100 flex-column overflow-hidden">
               <div className="card-header bg-dark text-white p-4 d-flex justify-content-between align-items-center">
-                <div className="d-flex align-items-center">
+                <h5 className="mb-0 fw-bold d-flex align-items-center">
                   <i className="bi bi-search me-3 fs-4 text-warning"></i>
-                  <h5 className="mb-0 fw-bold">Verification Workbench</h5>
-                </div>
-                <button onClick={() => setSelectedBLO(null)} className="btn btn-sm btn-outline-light d-lg-none">Close</button>
+                  {isEditing ? 'Correcting Record' : 'Verification Workbench'}
+                </h5>
+                <button onClick={() => { setSelectedBLO(null); setIsEditing(false); }} className="btn btn-sm btn-outline-light d-lg-none">Close</button>
               </div>
               
               <div className="row g-0 flex-grow-1">
                 <div className="col-12 col-md-7 bg-dark bg-opacity-10 d-flex flex-column border-end" style={{ minHeight: '600px' }}>
-                  <div className="p-3 bg-secondary bg-opacity-25 fw-bold small text-dark text-uppercase border-bottom d-flex justify-content-between">
-                    <span>Passbook / Cheque Image</span>
-                    <span className="text-primary"><i className="bi bi-zoom-in me-1"></i> Document View</span>
-                  </div>
+                  <div className="p-3 bg-secondary bg-opacity-25 fw-bold small text-dark text-uppercase border-bottom">Document Proof</div>
                   <div className="flex-grow-1 p-2 d-flex align-items-start justify-content-center overflow-auto bg-slate-900">
-                    {renderDocumentViewer(selectedBLO.Account_Passbook_Doc)}
+                    {renderDocumentViewer(isEditing && editForm ? editForm.Account_Passbook_Doc : selectedBLO.Account_Passbook_Doc)}
                   </div>
                 </div>
 
                 <div className="col-12 col-md-5 d-flex flex-column p-4 bg-white">
-                  <div className="mb-4">
-                    <h6 className="fw-bold text-uppercase text-muted extra-small mb-3">Compare With Document</h6>
-                    
-                    <div className="card border-0 bg-primary bg-opacity-10 p-4 mb-4 text-center">
-                      <label className="fw-bold text-primary text-uppercase mb-2" style={{fontSize: '0.7rem'}}>Entered Account Number</label>
-                      <div className="display-6 fw-bold text-dark font-monospace mb-0" style={{letterSpacing: '0.1rem'}}>
-                        {selectedBLO.Account_Number || 'NOT FOUND'}
+                  {isEditing && editForm ? (
+                    <div className="flex-grow-1">
+                      <h6 className="fw-bold text-primary mb-4 text-uppercase extra-small">Quick Detail Correction</h6>
+                      <div className="mb-3">
+                        <label className="form-label extra-small fw-bold text-muted">Account Number</label>
+                        <input 
+                          type="text" 
+                          className="form-control fw-bold font-monospace" 
+                          value={editForm.Account_Number} 
+                          onChange={e => setEditForm({...editForm, Account_Number: e.target.value.replace(/\D/g, '')})} 
+                        />
                       </div>
-                      <div className="mt-2">
-                        <button 
-                          className="btn btn-sm btn-light border py-1 px-3 fw-bold" 
-                          onClick={() => {navigator.clipboard.writeText(selectedBLO.Account_Number); alert('Copied!')}}
-                        >
-                          <i className="bi bi-copy me-1"></i> Copy
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="card border-0 bg-secondary bg-opacity-10 p-3 mb-4">
-                      <div className="row g-2">
-                        <div className="col-6">
-                          <label className="extra-small text-muted text-uppercase fw-bold" style={{fontSize: '0.65rem'}}>IFSC Code</label>
-                          <div className="h5 fw-bold text-dark font-monospace mb-0">{selectedBLO.IFSC_Code || '---'}</div>
-                        </div>
-                        <div className="col-6">
-                          <label className="extra-small text-muted text-uppercase fw-bold" style={{fontSize: '0.65rem'}}>EPIC No.</label>
-                          <div className="h6 fw-semibold text-secondary mb-0">{selectedBLO.EPIC || '---'}</div>
-                        </div>
-                        <div className="col-12 mt-3 pt-3 border-top">
-                          <label className="extra-small text-muted text-uppercase fw-bold" style={{fontSize: '0.65rem'}}>Personnel Info</label>
-                          <div className="fw-bold text-dark mb-1">
-                            {getEntityLabel(designations.find(d => String(d.Desg_ID).trim() === String(selectedBLO.Desg_ID).trim()), ['Desg_Name', 'Designation', 'Name'])}
-                          </div>
-                          <div className="small text-secondary">
-                            {getEntityLabel(departments.find(d => String(d.Dept_ID).trim() === String(selectedBLO.Dept_ID).trim()), ['Dept_Name', 'Department', 'Name'])}
-                          </div>
-                        </div>
-                        <div className="col-12 mt-3 pt-3 border-top">
-                          <label className="extra-small text-muted text-uppercase fw-bold" style={{fontSize: '0.65rem'}}>Bank & Branch</label>
-                          <div className="fw-bold text-dark mb-1">
-                            {banks.find(b => String(b.Bank_ID).trim() === String(selectedBLO.Bank_ID).trim())?.Bank_Name || 'Unknown Bank'}
-                          </div>
-                          <div className="small text-secondary">
-                            {branches.find(br => String(br.Branch_ID).trim() === String(selectedBLO.Branch_ID).trim())?.Branch_Name || 'Unknown Branch'}
-                          </div>
+                      <div className="mb-3">
+                        <label className="form-label extra-small fw-bold text-muted">IFSC Code</label>
+                        <div className="input-group">
+                          <input 
+                            type="text" 
+                            className="form-control font-monospace text-uppercase" 
+                            value={editForm.IFSC_Code} 
+                            onChange={e => setEditForm({...editForm, IFSC_Code: e.target.value.toUpperCase().trim()})} 
+                          />
+                          <button 
+                            className="btn btn-outline-primary" 
+                            type="button" 
+                            onClick={() => triggerIFSCSearch(editForm.IFSC_Code)}
+                            disabled={isSearching}
+                          >
+                            {isSearching ? <i className="bi bi-arrow-repeat spin"></i> : <i className="bi bi-search"></i>}
+                          </button>
                         </div>
                       </div>
+                      <div className="mb-4">
+                        <label className="form-label extra-small fw-bold text-muted">BLO Mobile</label>
+                        <input 
+                          type="text" 
+                          className="form-control" 
+                          value={editForm.Mobile} 
+                          onChange={e => setEditForm({...editForm, Mobile: e.target.value})} 
+                        />
+                      </div>
+                      
+                      <div className="d-grid gap-2">
+                        <button onClick={handleSaveEdit} className="btn btn-primary py-2 fw-bold shadow-sm">Update Details</button>
+                        <button onClick={() => setIsEditing(false)} className="btn btn-outline-secondary py-2">Cancel Edit</button>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="flex-grow-1 d-flex flex-column">
+                      <div className="card border-0 bg-primary bg-opacity-10 p-4 mb-4 text-center">
+                        <label className="fw-bold text-primary text-uppercase mb-2" style={{fontSize: '0.7rem'}}>Account Number</label>
+                        <div className="h3 fw-bold text-dark font-monospace mb-0">{selectedBLO.Account_Number || 'NOT ENTERED'}</div>
+                      </div>
 
-                  <div className="card border-0 shadow-sm p-3 bg-light mt-auto">
-                    <div className="d-flex align-items-start gap-2 mb-3">
-                      <i className="bi bi-info-circle-fill text-info mt-1"></i>
-                      <p className="small text-dark mb-0">
-                        Check the digits carefully. Once verified, the Tehsil user cannot edit this record without Admin intervention.
-                      </p>
-                    </div>
+                      <div className="card border-0 bg-secondary bg-opacity-10 p-3 mb-4">
+                        <div className="row g-2">
+                          <div className="col-6">
+                            <label className="extra-small text-muted text-uppercase fw-bold">IFSC Code</label>
+                            <div className="fw-bold font-monospace">{selectedBLO.IFSC_Code || '---'}</div>
+                          </div>
+                          <div className="col-6">
+                            <label className="extra-small text-muted text-uppercase fw-bold">EPIC</label>
+                            <div className="fw-bold">{selectedBLO.EPIC || '---'}</div>
+                          </div>
+                          <div className="col-12 pt-3 mt-2 border-top">
+                            <label className="extra-small text-muted text-uppercase fw-bold">Designation</label>
+                            <div className="small fw-semibold">{getEntityLabel(designations.find(d => String(d.Desg_ID).trim() === String(selectedBLO.Desg_ID).trim()), ['Desg_Name', 'Designation', 'Name'])}</div>
+                          </div>
+                        </div>
+                      </div>
 
-                    <div className="d-grid">
-                      {selectedBLO.Verified === 'yes' ? (
-                        <button 
-                          onClick={() => handleVerifyToggle(selectedBLO)}
-                          className="btn btn-danger py-3 shadow fw-bold d-flex align-items-center justify-content-center"
-                          disabled={!isAdmin}
-                        >
-                          <i className="bi bi-unlock-fill me-2 fs-5"></i>
-                          UN-VERIFY & UNLOCK
-                        </button>
-                      ) : (
-                        <button 
-                          onClick={() => handleVerifyToggle(selectedBLO)}
-                          className={`btn btn-success py-3 shadow fw-bold d-flex align-items-center justify-content-center ${!selectedBLO.Account_Number ? 'disabled' : ''}`}
-                        >
-                          <i className="bi bi-shield-fill-check me-2 fs-5"></i>
-                          CONFIRM & VERIFY
-                        </button>
-                      )}
-                      {selectedBLO.Verified === 'yes' && !isAdmin && <p className="text-center text-danger extra-small mt-2 mb-0">Administrator privileges required to unlock.</p>}
+                      <div className="mt-auto d-grid gap-2">
+                        {selectedBLO.Verified === 'no' && (
+                          <button onClick={startEditing} className="btn btn-outline-primary py-2 fw-bold d-flex align-items-center justify-content-center">
+                            <i className="bi bi-pencil-square me-2"></i> Edit Details
+                          </button>
+                        )}
+                        
+                        {selectedBLO.Verified === 'yes' ? (
+                          <button onClick={() => handleVerifyToggle(selectedBLO)} className="btn btn-danger py-3 shadow fw-bold" disabled={!isAdmin}>
+                            <i className="bi bi-unlock-fill me-2"></i> UN-VERIFY
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => handleVerifyToggle(selectedBLO)} 
+                            className={`btn btn-success py-3 shadow fw-bold ${!selectedBLO.Account_Number ? 'disabled' : ''}`}
+                          >
+                            <i className="bi bi-shield-fill-check me-2"></i> CONFIRM & VERIFY
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         ) : (
-          <div className="col-lg-8 d-none d-lg-flex align-items-center justify-content-center">
-            <div className="text-center p-5 border-2 border-dashed rounded-4 bg-white shadow-sm" style={{width: '100%', maxWidth: '500px'}}>
-              <div className="bg-light rounded-circle d-inline-flex align-items-center justify-content-center mb-4" style={{width: '100px', height: '100px'}}>
-                <i className="bi bi-check2-all text-primary fs-1"></i>
-              </div>
-              <h5 className="fw-bold text-dark">Ready for Verification</h5>
-              <p className="text-muted">Select an entry from the list to start matching data with the uploaded documents.</p>
-              <div className="badge bg-primary-subtle text-primary px-3 py-2">
-                {filteredAccounts.filter(a => a.Verified === 'no' && a.Account_Number).length} Pending Tasks
-              </div>
+          <div className="col-lg-8 d-none d-lg-flex align-items-center justify-content-center bg-white rounded-4 border">
+            <div className="text-center p-5">
+              <i className="bi bi-check2-all text-primary display-1 mb-3"></i>
+              <h4 className="fw-bold">Ready for Matching</h4>
+              <p className="text-muted">Select an officer to verify their bank details against the uploaded document.</p>
             </div>
           </div>
         )}

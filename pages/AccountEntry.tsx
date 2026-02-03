@@ -378,24 +378,46 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                     </div>
                     <div className="col-12">
                       <label className="form-label small fw-bold text-secondary">Account Passbook Doc (Upload PDF/JPG)</label>
-                      <input disabled={isLocked} type="file" className="form-control bg-white shadow-sm" onChange={handleFileChange} accept=".pdf,image/*" />
+                      <input disabled={isLocked} type="file" className="form-control bg-white shadow-sm mb-3" onChange={handleFileChange} accept=".pdf,image/*" />
+                      
                       {editForm.Account_Passbook_Doc && (
-                        <div className="mt-3 d-flex flex-column gap-2">
-                          {isFileNew ? (
-                            <div className="alert alert-info py-2 px-3 small border-0 d-flex align-items-center mb-0">
-                              <i className="bi bi-cloud-arrow-up-fill fs-5 me-2"></i>
-                              <span>New document selected. It will be uploaded to Google Drive upon saving.</span>
-                            </div>
-                          ) : (
-                            <div className="d-flex align-items-center gap-2">
-                              <span className="badge bg-success px-3 py-2"><i className="bi bi-check2-circle me-1"></i> Cloud Link Active</span>
-                              {editForm.Account_Passbook_Doc.startsWith('http') && (
-                                <a href={editForm.Account_Passbook_Doc} target="_blank" rel="noreferrer" className="btn btn-outline-primary btn-sm px-3 rounded-pill">
-                                  <i className="bi bi-eye me-1"></i> View Existing
-                                </a>
+                        <div className="mt-2">
+                          <div className="p-3 border rounded bg-white shadow-sm mb-3">
+                            <h6 className="fw-bold extra-small text-muted text-uppercase mb-3 d-flex align-items-center">
+                              <i className="bi bi-eye me-2"></i>
+                              Document Preview
+                              {isFileNew && <span className="ms-auto badge bg-info">Live Preview</span>}
+                            </h6>
+                            <div className="bg-light rounded overflow-hidden d-flex align-items-center justify-content-center" style={{ minHeight: '300px', maxHeight: '500px' }}>
+                              {editForm.Account_Passbook_Doc.startsWith('data:application/pdf') || (editForm.Account_Passbook_Doc.includes('drive.google.com') && editForm.Account_Passbook_Doc.toLowerCase().includes('.pdf')) ? (
+                                <embed 
+                                  src={editForm.Account_Passbook_Doc.includes('drive.google.com') ? editForm.Account_Passbook_Doc.replace('/view', '/preview') : editForm.Account_Passbook_Doc} 
+                                  className="w-100" 
+                                  style={{ height: '500px' }} 
+                                />
+                              ) : (
+                                <img 
+                                  src={editForm.Account_Passbook_Doc.includes('drive.google.com') ? editForm.Account_Passbook_Doc.replace('/view', '/preview') : editForm.Account_Passbook_Doc} 
+                                  alt="Selected Passbook" 
+                                  className="img-fluid"
+                                  style={{ maxHeight: '500px' }}
+                                />
                               )}
                             </div>
-                          )}
+                          </div>
+                          
+                          <div className="d-flex align-items-center gap-2">
+                            {isFileNew ? (
+                              <div className="alert alert-info py-2 px-3 small border-0 d-flex align-items-center mb-0 w-100 shadow-sm">
+                                <i className="bi bi-cloud-arrow-up-fill fs-5 me-2"></i>
+                                <span>New document selected. The old file on Drive will be replaced upon saving.</span>
+                              </div>
+                            ) : (
+                              <div className="d-flex align-items-center gap-2">
+                                <span className="badge bg-success px-3 py-2 shadow-sm"><i className="bi bi-check2-circle me-1"></i> Cloud Link Active</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -405,7 +427,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
 
               <div className="mt-5 pt-4 border-top d-flex gap-3 justify-content-end align-items-center">
                 <button type="button" onClick={() => setSelectedBLO(null)} className="btn btn-outline-secondary px-4">Cancel</button>
-                <button type="submit" disabled={isLocked} className="btn btn-primary btn-lg px-5 shadow-sm fw-bold position-relative overflow-hidden">
+                <button type="submit" disabled={isLocked} className="btn btn-primary btn-lg px-5 shadow-sm fw-bold">
                   Save & Push to Cloud
                 </button>
               </div>
