@@ -1,7 +1,7 @@
 import { User, BLOAccount, Bank, BankBranch, Department, Designation } from '../types';
 
 // The URL to your Google Apps Script Web App
-const API_URL = 'https://script.google.com/macros/s/AKfycbzMhe7bcwnhghxqOEqyFjzrzCsSYmh-mannth1jioMbxnjrlYPmS1YV0-bywTaMKDCKKw/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwxbTgUB5Ft47OgVgGGYVd8FPOS5aPuBnQwcjOR8HBZ34ufSwsgD4dwRskSMY3-ZPehew/exec';
 
 export const fetchAllData = async (): Promise<{ 
   users: User[], 
