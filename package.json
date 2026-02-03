@@ -1,22 +1,26 @@
+
 {
   "name": "blo-account-management-system",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "react-dom": "^19.2.4",
     "@google/genai": "^1.39.0",
-    "react": "^19.2.4"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "bootstrap": "^5.3.2",
+    "bootstrap-icons": "^1.11.1"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.10"
   }
 }

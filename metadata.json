@@ -2,6 +2,8 @@
   "name": "BLO Account Management System",
   "description": "A comprehensive system for managing Booth Level Officer (BLO) bank accounts, featuring role-based access, IFSC search integration via Gemini, and a robust verification module for administrators and tehsil users.",
   "requestFramePermissions": [
-    "camera"
+    "camera",
+    "microphone",
+    "geolocation"
   ]
 }
