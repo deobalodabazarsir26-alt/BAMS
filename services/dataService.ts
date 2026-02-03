@@ -1,7 +1,7 @@
 import { User, BLOAccount, Bank, BankBranch, Department, Designation } from '../types';
 
 // The URL to your Google Apps Script Web App
-const API_URL = 'https://script.google.com/macros/s/AKfycbxgAyrNdMQLJ_u36VvbJAS3IvsCCVnTSg1omM7lmwhduUGwhkxq3ppEqsabiukgUiEI1w/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzMhe7bcwnhghxqOEqyFjzrzCsSYmh-mannth1jioMbxnjrlYPmS1YV0-bywTaMKDCKKw/exec';
 
 export const fetchAllData = async (): Promise<{ 
   users: User[], 
@@ -27,7 +27,19 @@ export const fetchAllData = async (): Promise<{
   }
 };
 
-export const updateAccountOnSheet = async (account: BLOAccount): Promise<boolean> => {
+export const runDiagnostics = async (): Promise<any> => {
+  try {
+    const response = await fetch(`${API_URL}?check=true`);
+    const data = await response.json();
+    console.log("Portal Diagnostics Report:", data);
+    return data;
+  } catch (error) {
+    console.error("Diagnostics Request Failed:", error);
+    return { success: false, error: error.toString() };
+  }
+};
+
+export const updateAccountOnSheet = async (account: BLOAccount): Promise<{success: boolean, message?: string}> => {
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
@@ -37,10 +49,10 @@ export const updateAccountOnSheet = async (account: BLOAccount): Promise<boolean
       })
     });
     const res = await response.json();
-    return res.success;
+    return res;
   } catch (error) {
     console.error("Update Account Error:", error);
-    return false;
+    return { success: false, message: error.toString() };
   }
 };
 

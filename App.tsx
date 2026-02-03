@@ -56,16 +56,16 @@ const App: React.FC = () => {
       if (newBank) await addBankOnSheet(newBank);
       if (newBranch) await addBranchOnSheet(newBranch);
       
-      const success = await updateAccountOnSheet(updated);
-      if (success) {
+      const result = await updateAccountOnSheet(updated);
+      if (result.success) {
         // Refresh local state
         await loadData();
         alert("Record updated successfully in Google Sheets.");
       } else {
-        alert("Failed to update record.");
+        alert("Failed to update record: " + (result.message || "Unknown error occurred on server."));
       }
     } catch (e) {
-      alert("Operation failed.");
+      alert("Operation failed: " + (e as Error).message);
     } finally {
       setIsLoading(false);
     }

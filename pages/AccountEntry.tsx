@@ -176,6 +176,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
 
   if (selectedBLO && editForm) {
     const isLocked = editForm.Verified === 'yes' && user.User_Type !== UserType.ADMIN;
+    const isFileNew = editForm.Account_Passbook_Doc && editForm.Account_Passbook_Doc.startsWith('data:');
     
     const currentBank = banks.find(b => String(b.Bank_ID).trim() === String(editForm.Bank_ID).trim()) || (stagedBank?.Bank_ID === editForm.Bank_ID ? stagedBank : null);
     const currentBranch = branches.find(br => String(br.Branch_ID).trim() === String(editForm.Branch_ID).trim()) || (stagedBranch?.Branch_ID === editForm.Branch_ID ? stagedBranch : null);
@@ -377,12 +378,23 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                     </div>
                     <div className="col-12">
                       <label className="form-label small fw-bold text-secondary">Account Passbook Doc (Upload PDF/JPG)</label>
-                      <input disabled={isLocked} type="file" className="form-control bg-white" onChange={handleFileChange} />
+                      <input disabled={isLocked} type="file" className="form-control bg-white shadow-sm" onChange={handleFileChange} accept=".pdf,image/*" />
                       {editForm.Account_Passbook_Doc && (
-                        <div className="mt-2 d-flex align-items-center gap-2">
-                          <span className="badge bg-success px-3 py-2"><i className="bi bi-check2-circle me-1"></i> Document Ready</span>
-                          {editForm.Account_Passbook_Doc.startsWith('http') && (
-                            <a href={editForm.Account_Passbook_Doc} target="_blank" rel="noreferrer" className="btn btn-link btn-sm text-decoration-none p-0">View Current</a>
+                        <div className="mt-3 d-flex flex-column gap-2">
+                          {isFileNew ? (
+                            <div className="alert alert-info py-2 px-3 small border-0 d-flex align-items-center mb-0">
+                              <i className="bi bi-cloud-arrow-up-fill fs-5 me-2"></i>
+                              <span>New document selected. It will be uploaded to Google Drive upon saving.</span>
+                            </div>
+                          ) : (
+                            <div className="d-flex align-items-center gap-2">
+                              <span className="badge bg-success px-3 py-2"><i className="bi bi-check2-circle me-1"></i> Cloud Link Active</span>
+                              {editForm.Account_Passbook_Doc.startsWith('http') && (
+                                <a href={editForm.Account_Passbook_Doc} target="_blank" rel="noreferrer" className="btn btn-outline-primary btn-sm px-3 rounded-pill">
+                                  <i className="bi bi-eye me-1"></i> View Existing
+                                </a>
+                              )}
+                            </div>
                           )}
                         </div>
                       )}
@@ -391,10 +403,10 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                 </div>
               </div>
 
-              <div className="mt-5 pt-4 border-top d-flex gap-3 justify-content-end">
+              <div className="mt-5 pt-4 border-top d-flex gap-3 justify-content-end align-items-center">
                 <button type="button" onClick={() => setSelectedBLO(null)} className="btn btn-outline-secondary px-4">Cancel</button>
-                <button type="submit" disabled={isLocked} className="btn btn-primary btn-lg px-5 shadow-sm fw-bold">
-                  Save & Upload to Drive
+                <button type="submit" disabled={isLocked} className="btn btn-primary btn-lg px-5 shadow-sm fw-bold position-relative overflow-hidden">
+                  Save & Push to Cloud
                 </button>
               </div>
             </form>
@@ -457,15 +469,20 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                     )}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    {blo.Verified === 'yes' ? (
-                      <span className="badge bg-success-subtle text-success rounded-pill px-3">
-                        <i className="bi bi-shield-check me-1"></i> Verified
-                      </span>
-                    ) : (
-                      <span className="badge bg-warning-subtle text-warning-emphasis rounded-pill px-3">
-                        Pending
-                      </span>
-                    )}
+                    <div className="d-flex flex-column align-items-center">
+                      {blo.Verified === 'yes' ? (
+                        <span className="badge bg-success-subtle text-success rounded-pill px-3">
+                          <i className="bi bi-shield-check me-1"></i> Verified
+                        </span>
+                      ) : (
+                        <span className="badge bg-warning-subtle text-warning-emphasis rounded-pill px-3">
+                          Pending
+                        </span>
+                      )}
+                      {blo.Account_Passbook_Doc && blo.Account_Passbook_Doc.startsWith('http') && (
+                        <i className="bi bi-cloud-check text-success extra-small mt-1" title="Document Available"></i>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-end">
                     <button 
