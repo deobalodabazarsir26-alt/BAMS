@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BLOAccount, User, UserType, Bank, BankBranch } from '../types';
 import { searchIFSCViaGemini } from '../services/geminiService';
 
@@ -15,6 +14,14 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
   const [selectedBLO, setSelectedBLO] = useState<BLOAccount | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [editForm, setEditForm] = useState<BLOAccount | null>(null);
+  
+  // Local state for manual override names if Gemini fails or user wants to override
+  const [manualBankName, setManualBankName] = useState('');
+  const [manualBranchName, setManualBranchName] = useState('');
+  const [searchFeedback, setSearchFeedback] = useState<{ type: 'success' | 'error' | 'none', message: string }>({ type: 'none', message: '' });
+
+  // Track the last searched IFSC to avoid redundant auto-searches
+  const lastSearchedRef = useRef<string>('');
 
   const filteredAccounts = user.User_Type === UserType.ADMIN 
     ? accounts 
@@ -23,16 +30,26 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
   const handleEdit = (blo: BLOAccount) => {
     setSelectedBLO(blo);
     setEditForm({ ...blo });
+    setSearchFeedback({ type: 'none', message: '' });
+    setManualBankName('');
+    setManualBranchName('');
+    lastSearchedRef.current = blo.IFSC_Code || '';
+    (window as any)._stagedBank = undefined;
+    (window as any)._stagedBranch = undefined;
   };
 
-  const handleIFSCChange = async (val: string) => {
-    if (!editForm) return;
-    const cleanVal = val.toUpperCase().trim();
-    setEditForm({ ...editForm, IFSC_Code: cleanVal });
+  const triggerIFSCSearch = async (ifscCode: string) => {
+    if (!ifscCode || ifscCode.length !== 11) {
+      setSearchFeedback({ type: 'error', message: 'Please enter a valid 11-digit IFSC code.' });
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchFeedback({ type: 'none', message: '' });
+    lastSearchedRef.current = ifscCode;
     
-    if (cleanVal.length === 11) {
-      setIsSearching(true);
-      const result = await searchIFSCViaGemini(cleanVal);
+    try {
+      const result = await searchIFSCViaGemini(ifscCode);
       if (result) {
         let bank = banks.find(b => b.Bank_Name.toLowerCase() === result.bankName.toLowerCase());
         let branch = branches.find(br => br.IFSC_Code === result.ifsc);
@@ -57,16 +74,30 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
 
         setEditForm(prev => prev ? ({
           ...prev,
+          IFSC_Code: result.ifsc, // Sync casing just in case
           Bank_ID: targetBankId,
           Branch_ID: branch ? branch.Branch_ID : newBranch!.Branch_ID
         }) : null);
 
         (window as any)._stagedBank = newBank;
         (window as any)._stagedBranch = newBranch;
+        setSearchFeedback({ type: 'success', message: 'Bank details found successfully.' });
+      } else {
+        setSearchFeedback({ type: 'error', message: 'Could not find bank details automatically. You can enter details manually.' });
       }
+    } catch (err) {
+      setSearchFeedback({ type: 'error', message: 'Search failed. Manual entry is enabled.' });
+    } finally {
       setIsSearching(false);
     }
   };
+
+  // Automatic search when IFSC reaches 11 characters
+  useEffect(() => {
+    if (editForm && editForm.IFSC_Code.length === 11 && editForm.IFSC_Code !== lastSearchedRef.current) {
+      triggerIFSCSearch(editForm.IFSC_Code);
+    }
+  }, [editForm?.IFSC_Code]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -86,7 +117,36 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
         alert("Account Number and IFSC Code are mandatory.");
         return;
       }
-      onUpdate(editForm, (window as any)._stagedBank, (window as any)._stagedBranch);
+
+      let finalBank = (window as any)._stagedBank;
+      let finalBranch = (window as any)._stagedBranch;
+
+      // If search failed, allow user to save with manual values
+      if (!finalBank && manualBankName) {
+        finalBank = {
+          Bank_ID: 'B_' + Date.now(),
+          Bank_Name: manualBankName,
+          T_STMP_ADD: new Date().toISOString(),
+          T_STMP_UPD: new Date().toISOString()
+        };
+        editForm.Bank_ID = finalBank.Bank_ID;
+      }
+
+      if (!finalBranch && manualBranchName) {
+        finalBranch = {
+          Branch_ID: 'BR_' + Date.now(),
+          Branch_Name: manualBranchName,
+          IFSC_Code: editForm.IFSC_Code,
+          Bank_ID: editForm.Bank_ID,
+          T_STMP_ADD: new Date().toISOString(),
+          T_STMP_UPD: new Date().toISOString()
+        };
+        editForm.Branch_ID = finalBranch.Branch_ID;
+      }
+
+      // Even if Bank/Branch IDs are missing (search failed and no manual name given), 
+      // we still let it update to allow partial saves as requested.
+      onUpdate(editForm, finalBank, finalBranch);
       setSelectedBLO(null);
       setEditForm(null);
       delete (window as any)._stagedBank;
@@ -96,6 +156,8 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
 
   if (selectedBLO && editForm) {
     const isLocked = editForm.Verified === 'yes' && user.User_Type !== UserType.ADMIN;
+    const currentBank = banks.find(b => b.Bank_ID === editForm.Bank_ID);
+    const currentBranch = branches.find(br => br.Branch_ID === editForm.Branch_ID);
 
     return (
       <div className="container-fluid py-2">
@@ -121,32 +183,70 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                 <div className="card-body p-4 bg-white border-start border-primary border-5 rounded-end">
                   <h6 className="text-primary fw-bold text-uppercase small mb-4 d-flex align-items-center">
                     <i className="bi bi-credit-card-2-front me-2"></i>
-                    Core Bank Account Information (Mandatory)
+                    Core Bank Account Information
                   </h6>
                   <div className="row g-4">
                     <div className="col-md-6">
                       <div className="p-3 border rounded-3 bg-light">
                         <label className="form-label fw-bold text-dark mb-2">IFSC Code</label>
                         <div className="input-group input-group-lg shadow-sm">
-                          <span className="input-group-text bg-white border-end-0"><i className={`bi ${isSearching ? 'bi-arrow-repeat spin' : 'bi-search'}`}></i></span>
                           <input 
                             disabled={isLocked} 
                             type="text" 
-                            className="form-control border-start-0 fw-bold text-primary" 
+                            className="form-control fw-bold text-primary" 
                             placeholder="Enter 11-digit IFSC" 
                             maxLength={11}
                             value={editForm.IFSC_Code} 
-                            onChange={e => handleIFSCChange(e.target.value)} 
+                            onChange={e => setEditForm({...editForm, IFSC_Code: e.target.value.toUpperCase().trim()})} 
                           />
+                          <button 
+                            type="button" 
+                            className="btn btn-primary px-4" 
+                            onClick={() => triggerIFSCSearch(editForm.IFSC_Code)}
+                            disabled={isSearching || isLocked}
+                          >
+                            {isSearching ? <i className="bi bi-arrow-repeat spin"></i> : <><i className="bi bi-search me-2"></i>Search</>}
+                          </button>
                         </div>
-                        <div className="mt-3 p-2 rounded bg-white border border-info-subtle">
-                          <div className="small text-muted text-uppercase fw-bold" style={{fontSize: '0.65rem'}}>Validated Bank/Branch:</div>
-                          <div className="fw-bold text-info">
-                            {banks.find(b => b.Bank_ID === editForm.Bank_ID)?.Bank_Name || '---'}
+                        
+                        {searchFeedback.type !== 'none' && (
+                          <div className={`mt-2 small fw-bold text-${searchFeedback.type === 'error' ? 'danger' : 'success'}`}>
+                            {searchFeedback.message}
                           </div>
-                          <div className="small text-secondary">
-                            {branches.find(br => br.Branch_ID === editForm.Branch_ID)?.Branch_Name || 'Enter valid IFSC to search'}
-                          </div>
+                        )}
+
+                        <div className="mt-3 p-3 rounded bg-white border border-info-subtle shadow-sm">
+                          <div className="small text-muted text-uppercase fw-bold mb-2" style={{fontSize: '0.65rem'}}>Directory Lookup:</div>
+                          
+                          {(currentBank || currentBranch) ? (
+                            <>
+                              <div className="fw-bold text-dark">{currentBank?.Bank_Name || '---'}</div>
+                              <div className="small text-secondary">{currentBranch?.Branch_Name || '---'}</div>
+                            </>
+                          ) : (
+                            <div className="text-muted italic small">No record found in sheets. Type names below if search failed.</div>
+                          )}
+
+                          {/* Manual entry fallback */}
+                          {!isLocked && (!currentBank || !currentBranch) && (
+                            <div className="mt-3 pt-3 border-top">
+                              <label className="form-label extra-small text-muted fw-bold">Manual Bank Details</label>
+                              <input 
+                                type="text" 
+                                className="form-control form-control-sm mb-2" 
+                                placeholder="Bank Name (e.g. State Bank of India)" 
+                                value={manualBankName} 
+                                onChange={e => setManualBankName(e.target.value)}
+                              />
+                              <input 
+                                type="text" 
+                                className="form-control form-control-sm" 
+                                placeholder="Branch Name (e.g. Main Branch Mumbai)" 
+                                value={manualBranchName} 
+                                onChange={e => setManualBranchName(e.target.value)}
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -161,11 +261,11 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                           value={editForm.Account_Number} 
                           onChange={e => setEditForm({...editForm, Account_Number: e.target.value.replace(/\D/g, '')})} 
                         />
-                        <div className="form-text mt-2"><i className="bi bi-info-circle me-1"></i> Ensure no spaces or special characters.</div>
+                        <div className="form-text mt-2"><i className="bi bi-info-circle me-1"></i> Digits only. No spaces.</div>
                       </div>
                     </div>
                     <div className="col-12">
-                      <label className="form-label small fw-bold text-secondary">Upload Passbook / Cancelled Cheque (PDF/JPG)</label>
+                      <label className="form-label small fw-bold text-secondary">Passbook Proof (Upload PDF or Image)</label>
                       <input disabled={isLocked} type="file" className="form-control bg-white" onChange={handleFileChange} />
                       {editForm.Account_Passbook_Doc && (
                         <div className="mt-2">
@@ -234,7 +334,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
               <div className="mt-5 pt-4 border-top d-flex gap-3 justify-content-end">
                 <button type="button" onClick={() => setSelectedBLO(null)} className="btn btn-outline-secondary px-4">Cancel</button>
                 <button type="submit" disabled={isLocked} className="btn btn-primary btn-lg px-5 shadow-sm fw-bold">
-                  Update Account Records
+                  Update Record
                 </button>
               </div>
             </form>
@@ -249,7 +349,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
         <div>
           <h3 className="fw-bold mb-1">BLO Bank Directory</h3>
-          <p className="text-muted small mb-0">Manage and update bank account details for all booth level officers.</p>
+          <p className="text-muted small mb-0">Update and manage bank account details for election personnel.</p>
         </div>
         <div className="d-flex align-items-center gap-2">
           <span className="badge bg-primary px-3 py-2">{filteredAccounts.length} Total Records</span>
@@ -284,7 +384,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                     {blo.Account_Number ? (
                       <span className="fw-bold text-dark">{blo.Account_Number}</span>
                     ) : (
-                      <span className="text-danger small italic"><i className="bi bi-x-circle me-1"></i> Not Provided</span>
+                      <span className="text-danger small italic"><i className="bi bi-x-circle me-1"></i> Pending</span>
                     )}
                   </td>
                   <td className="px-4 py-3 bg-light font-monospace">
