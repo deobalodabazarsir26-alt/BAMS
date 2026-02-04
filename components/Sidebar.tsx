@@ -30,7 +30,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, onNavigate, currentPage, isOpen
           <div className="bg-primary rounded-3 p-2 me-2">
             <i className="bi bi-shield-check text-white fs-4"></i>
           </div>
-          <h5 className="mb-0 fw-bold">BLO PORTAL</h5>
+          <h5 className="mb-0 fw-bold">ACCOUNT PORTAL</h5>
         </div>
 
         <div className="card bg-dark border-0 mb-4 text-white p-3">

@@ -31,8 +31,8 @@ const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
               <div className="bg-primary bg-opacity-10 d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-sm" style={{ width: '80px', height: '80px' }}>
                 <i className="bi bi-person-badge text-primary fs-1"></i>
               </div>
-              <h3 className="fw-bold text-dark">BLO Portal Login</h3>
-              <p className="text-muted small">Election Commission Management System</p>
+              <h3 className="fw-bold text-dark">Account Portal Login</h3>
+              <p className="text-muted small">Official Account Management System</p>
             </div>
 
             <form onSubmit={handleSubmit}>
@@ -76,18 +76,11 @@ const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
                 <p className="extra-small text-muted mb-0" style={{ fontSize: '0.75rem' }}>
                   Restricted to authorized election personnel only.
                   <br />
-                  <span className="fw-semibold">District Election Office 2024</span>
+                  <span className="fw-semibold">District Election Office Balodabazar 2026</span>
                 </p>
               </div>
             </form>
           </div>
-        </div>
-      </div>
-
-      <div className="position-fixed bottom-0 start-50 translate-middle-x p-4 text-white opacity-50 text-center w-100 d-none d-md-block">
-        <div className="d-flex justify-content-center gap-3 small">
-          <span className="badge bg-white text-dark">Admin: admin / password123</span>
-          <span className="badge bg-white text-dark">Tehsil: tehsil_central / password123</span>
         </div>
       </div>
     </div>

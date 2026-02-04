@@ -28,7 +28,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, accounts }) => {
         <div className="col">
           <div className="card bg-white p-4">
             <h2 className="fw-bold mb-1">Welcome, {user.Officer_Name}</h2>
-            <p className="text-muted mb-0">Booth Level Officer Management Dashboard</p>
+            <p className="text-muted mb-0">Officer Account Management Dashboard</p>
           </div>
         </div>
       </div>

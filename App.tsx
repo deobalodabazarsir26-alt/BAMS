@@ -32,7 +32,7 @@ const App: React.FC = () => {
       setState(prev => ({ ...prev, ...data }));
     } catch (error) {
       console.error("Could not load data:", error);
-      alert("Error connecting to Google Sheets. Check console and API_URL config.");
+      alert("Error connecting to Cloud Database. Check console and API_URL config.");
     } finally {
       setIsLoading(false);
       setIsInitialized(true);
@@ -62,7 +62,7 @@ const App: React.FC = () => {
       if (result.success) {
         // Refresh local state
         await loadData();
-        alert("Record updated successfully in Google Sheets.");
+        alert("Record updated successfully to Cloud Database.");
       } else {
         alert("Failed to update record: " + (result.message || "Unknown error occurred on server."));
       }
@@ -112,7 +112,7 @@ const App: React.FC = () => {
     return (
       <div className="min-vh-100 d-flex flex-column align-items-center justify-content-center bg-light">
         <div className="spinner-border text-primary mb-3" role="status"></div>
-        <div className="fw-bold text-muted">Connecting to Google Sheets...</div>
+        <div className="fw-bold text-muted">Connecting to Cloud Database...</div>
       </div>
     );
   }
@@ -197,7 +197,7 @@ const App: React.FC = () => {
             <div className="bg-primary rounded-2 p-1 me-2">
               <i className="bi bi-shield-check text-white fs-5"></i>
             </div>
-            <h5 className="mb-0 fw-bold">BLO PORTAL</h5>
+            <h5 className="mb-0 fw-bold">ACCOUNT PORTAL</h5>
           </div>
           <button className="btn btn-light" onClick={() => setIsSidebarOpen(true)}>
             <i className="bi bi-list fs-4"></i>
