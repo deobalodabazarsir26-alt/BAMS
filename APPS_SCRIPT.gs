@@ -102,7 +102,8 @@ function getSheetData(sheetName) {
     for (let i = 1; i < values.length; i++) {
       const obj = {};
       for (let j = 0; j < headers.length; j++) {
-        obj[headers[j]] = values[i][j];
+        // Force all values to string to preserve leading zeros in ID and Account fields
+        obj[headers[j]] = String(values[i][j]);
       }
       data.push(obj);
     }
@@ -129,6 +130,14 @@ function updateRecord(sheetName, idColumnName, idValue, updateObj) {
       if (data[i][idColIndex] == idValue) {
         updateObj['T_STMP_UPD'] = new Date().toISOString();
         
+        // Ensure Account Number is saved as a literal string to preserve leading zeros
+        if (updateObj['Account_Number']) {
+           let acVal = String(updateObj['Account_Number']);
+           if (!acVal.startsWith("'")) {
+             updateObj['Account_Number'] = "'" + acVal;
+           }
+        }
+
         // Handle file upload and deletion of old file
         if (updateObj['Account_Passbook_Doc'] && updateObj['Account_Passbook_Doc'].startsWith('data:')) {
           const colIdxDoc = headers.indexOf('Account_Passbook_Doc');
@@ -223,6 +232,14 @@ function addRecord(sheetName, recordObj) {
     
     recordObj['T_STMP_ADD'] = new Date().toISOString();
     recordObj['T_STMP_UPD'] = new Date().toISOString();
+
+    // Ensure Account Number is saved as a literal string to preserve leading zeros
+    if (recordObj['Account_Number']) {
+       let acVal = String(recordObj['Account_Number']);
+       if (!acVal.startsWith("'")) {
+         recordObj['Account_Number'] = "'" + acVal;
+       }
+    }
     
     for (let key in recordObj) {
       const colIndex = headers.indexOf(key);

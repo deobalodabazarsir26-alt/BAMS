@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BLOAccount, User, UserType, Bank, BankBranch, Department, Designation } from '../types';
 import { searchIFSCViaGemini } from '../services/geminiService';
+// Dynamic imports for export libraries
+import * as XLSX from 'https://esm.sh/xlsx';
+import { jsPDF } from 'https://esm.sh/jspdf';
+import autoTable from 'https://esm.sh/jspdf-autotable';
 
 interface VerificationProps {
   user: User;
@@ -18,6 +22,7 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<BLOAccount | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const lastSearchedRef = useRef<string>('');
   
   const isAdmin = user.User_Type === UserType.ADMIN;
@@ -86,6 +91,90 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
     setIsSearching(false);
   };
 
+  const getExportData = () => {
+    const verifiedOnly = accounts.filter(a => a.Verified === 'yes');
+    return verifiedOnly.map(a => {
+      const bank = banks.find(b => String(b.Bank_ID).trim() === String(a.Bank_ID).trim());
+      const branch = branches.find(br => String(br.Branch_ID).trim() === String(a.Branch_ID).trim());
+      return {
+        'AC_No': a.AC_No,
+        'Part_No': a.Part_No,
+        'Part_Name_HI': a.Part_Name_HI,
+        'BLO_Name': a.BLO_Name,
+        'Mobile': a.Mobile,
+        'Bank_Name': bank ? bank.Bank_Name : '---',
+        'Branch_Name': branch ? branch.Branch_Name : '---',
+        'IFSC_Code': a.IFSC_Code,
+        'Account_Number': a.Account_Number,
+        'Verification Status': 'Verified'
+      };
+    });
+  };
+
+  const handleExportExcel = () => {
+    const data = getExportData();
+    if (data.length === 0) {
+      alert("No verified records found to export.");
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Verified_BLO_Accounts");
+      XLSX.writeFile(wb, `BLO_Verified_Records_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } catch (err) {
+      console.error("Excel Export Error:", err);
+      alert("Failed to export Excel file.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportPDF = () => {
+    const data = getExportData();
+    if (data.length === 0) {
+      alert("No verified records found to export.");
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const doc = new jsPDF('l', 'pt', 'a4');
+      const headers = [['AC No', 'Part', 'Part Name (HI)', 'BLO Name', 'Mobile', 'Bank', 'Branch', 'IFSC', 'Account No', 'Status']];
+      const rows = data.map(item => [
+        item.AC_No,
+        item.Part_No,
+        item.Part_Name_HI,
+        item.BLO_Name,
+        item.Mobile,
+        item.Bank_Name,
+        item.Branch_Name,
+        item.IFSC_Code,
+        item.Account_Number,
+        item['Verification Status']
+      ]);
+
+      doc.text("Verified BLO Bank Account Records", 40, 40);
+      autoTable(doc, {
+        head: headers,
+        body: rows,
+        startY: 60,
+        theme: 'striped',
+        styles: { fontSize: 8, cellPadding: 4 },
+        headStyles: { fillColor: [13, 110, 253] }
+      });
+
+      doc.save(`BLO_Verified_Records_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (err) {
+      console.error("PDF Export Error:", err);
+      alert("Failed to export PDF file.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const renderDocumentViewer = (doc: string) => {
     if (!doc) return (
       <div className="text-center text-muted m-auto p-5">
@@ -94,7 +183,6 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
       </div>
     );
 
-    // Handle Google Drive links
     if (doc.includes('drive.google.com')) {
       const previewUrl = doc.replace('/view?usp=sharing', '/preview').replace('/view', '/preview');
       return (
@@ -102,7 +190,6 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
       );
     }
 
-    // Handle Local Base64 PDF
     if (doc.startsWith('data:application/pdf')) {
       return (
         <iframe 
@@ -113,7 +200,6 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
       );
     } 
     
-    // Handle Local Base64 Image
     if (doc.startsWith('data:image')) {
       return (
         <img src={doc} alt="Passbook" className="img-fluid rounded shadow-lg m-auto" style={{maxHeight: '90%'}} />
@@ -131,11 +217,38 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
     <div className="container-fluid py-2">
       <div className="row g-4">
         <div className={`col-12 col-lg-4 ${selectedBLO ? 'd-none d-lg-block' : ''}`}>
-          <div className="d-flex justify-content-between align-items-center mb-4">
+          <div className="d-flex flex-column gap-3 mb-4">
             <h3 className="fw-bold mb-0">Verification Queue</h3>
+            
+            <div className="card border-0 shadow-sm bg-light">
+              <div className="card-body p-3">
+                <p className="extra-small text-muted fw-bold text-uppercase mb-2">Export Verified Data</p>
+                <div className="btn-group w-100 shadow-sm">
+                  <button 
+                    onClick={handleExportExcel} 
+                    className="btn btn-success btn-sm d-flex align-items-center justify-content-center"
+                    disabled={isExporting}
+                  >
+                    <i className="bi bi-file-earmark-excel me-2"></i> Excel
+                  </button>
+                  <button 
+                    onClick={handleExportPDF} 
+                    className="btn btn-danger btn-sm d-flex align-items-center justify-content-center"
+                    disabled={isExporting}
+                  >
+                    <i className="bi bi-file-earmark-pdf me-2"></i> PDF
+                  </button>
+                </div>
+                <div className="mt-2 text-primary" style={{ fontSize: '0.6rem' }}>
+                  <i className="bi bi-info-circle me-1"></i> 
+                  Only <strong>Verified</strong> records will be included in the export.
+                </div>
+              </div>
+            </div>
           </div>
+
           <div className="card shadow-sm border-0 overflow-hidden">
-            <div className="list-group list-group-flush" style={{maxHeight: '75vh', overflowY: 'auto'}}>
+            <div className="list-group list-group-flush" style={{maxHeight: '65vh', overflowY: 'auto'}}>
               {filteredAccounts.length === 0 && (
                 <div className="p-4 text-center text-muted italic">
                   No records with completed bank entries found.
@@ -192,9 +305,14 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
                         <label className="form-label extra-small fw-bold text-muted">Account Number <span className="text-danger">*</span></label>
                         <input 
                           type="text" 
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           className="form-control fw-bold font-monospace" 
-                          value={editForm.Account_Number} 
-                          onChange={e => setEditForm({...editForm, Account_Number: e.target.value.replace(/\D/g, '')})} 
+                          value={String(editForm.Account_Number || '')} 
+                          onChange={e => {
+                            const val = e.target.value.replace(/\D/g, '');
+                            setEditForm({...editForm, Account_Number: val});
+                          }} 
                           required
                         />
                       </div>

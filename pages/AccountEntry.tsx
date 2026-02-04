@@ -410,13 +410,18 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                         <input 
                           disabled={isLocked} 
                           type="text" 
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           className="form-control form-control-lg shadow-sm fw-bold text-dark" 
                           placeholder="Enter Full Account Number"
-                          value={editForm.Account_Number} 
-                          onChange={e => setEditForm({...editForm, Account_Number: e.target.value.replace(/\D/g, '')})} 
+                          value={String(editForm.Account_Number || '')} 
+                          onChange={e => {
+                            const val = e.target.value.replace(/\D/g, '');
+                            setEditForm({...editForm, Account_Number: val});
+                          }} 
                           required
                         />
-                        <div className="form-text mt-2"><i className="bi bi-info-circle me-1"></i> Digits only. No spaces.</div>
+                        <div className="form-text mt-2"><i className="bi bi-info-circle me-1"></i> Digits only. Leading zeros are preserved.</div>
                       </div>
                     </div>
                     <div className="col-12">
