@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, BLOAccount, Bank, BankBranch, AppState, Department, Designation } from './types';
 import { fetchAllData, updateAccountOnSheet, updateVerificationOnSheet, addBankOnSheet, addBranchOnSheet } from './services/dataService';
@@ -5,6 +6,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import AccountEntry from './pages/AccountEntry';
 import Verification from './pages/Verification';
+import Reports from './pages/Reports';
 import Sidebar from './components/Sidebar';
 
 const App: React.FC = () => {
@@ -126,6 +128,15 @@ const App: React.FC = () => {
             departments={state.departments}
             designations={state.designations}
             onVerify={handleVerify}
+            onUpdate={updateAccount}
+          />
+        );
+      case 'reports':
+        return (
+          <Reports 
+            user={state.currentUser!} 
+            accounts={state.accounts} 
+            users={state.users}
           />
         );
       default:
