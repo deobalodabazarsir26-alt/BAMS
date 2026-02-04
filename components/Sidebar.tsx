@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { User, UserType } from '../types';
 
@@ -16,6 +15,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, onNavigate, currentPage, isOpen
     { id: 'dashboard', label: 'Dashboard', icon: 'bi-grid-1x2-fill', roles: [UserType.ADMIN, UserType.TEHSIL] },
     { id: 'entry', label: 'Account Entry', icon: 'bi-pencil-square', roles: [UserType.ADMIN, UserType.TEHSIL] },
     { id: 'verification', label: 'Verification', icon: 'bi-patch-check-fill', roles: [UserType.ADMIN, UserType.TEHSIL] },
+    { id: 'users', label: 'User Management', icon: 'bi-people-fill', roles: [UserType.ADMIN, UserType.TEHSIL] },
     { id: 'reports', label: 'Reports', icon: 'bi-bar-chart-line-fill', roles: [UserType.ADMIN, UserType.TEHSIL] },
   ];
 

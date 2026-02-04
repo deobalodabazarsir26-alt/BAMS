@@ -35,6 +35,8 @@ function doPost(e) {
     
     if (action === 'updateAccount') {
       result = updateRecord('BLO_Account', 'BLO_ID', payload.BLO_ID, payload);
+    } else if (action === 'updateUser') {
+      result = updateRecord('User', 'User_ID', payload.User_ID, payload);
     } else if (action === 'addBank') {
       result = addRecord('Bank', payload);
     } else if (action === 'addBranch') {

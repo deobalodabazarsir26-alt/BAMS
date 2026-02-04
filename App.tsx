@@ -1,12 +1,12 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, BLOAccount, Bank, BankBranch, AppState, Department, Designation } from './types';
-import { fetchAllData, updateAccountOnSheet, updateVerificationOnSheet, addBankOnSheet, addBranchOnSheet } from './services/dataService';
+import { fetchAllData, updateAccountOnSheet, updateVerificationOnSheet, addBankOnSheet, addBranchOnSheet, updateUserOnSheet } from './services/dataService';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import AccountEntry from './pages/AccountEntry';
 import Verification from './pages/Verification';
 import Reports from './pages/Reports';
+import UserManagement from './pages/UserManagement';
 import Sidebar from './components/Sidebar';
 
 const App: React.FC = () => {
@@ -73,6 +73,25 @@ const App: React.FC = () => {
     }
   }, []);
 
+  const handleUpdateUser = useCallback(async (updatedUser: User) => {
+    setIsLoading(true);
+    try {
+      const result = await updateUserOnSheet(updatedUser);
+      if (result.success) {
+        if (state.currentUser?.User_ID === updatedUser.User_ID) {
+          setState(prev => ({ ...prev, currentUser: updatedUser }));
+        }
+        await loadData();
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (e) {
+      alert("Update failed: " + (e as Error).message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [state.currentUser]);
+
   const handleVerify = useCallback(async (bloId: string, verified: 'yes' | 'no') => {
     setIsLoading(true);
     try {
@@ -129,6 +148,14 @@ const App: React.FC = () => {
             designations={state.designations}
             onVerify={handleVerify}
             onUpdate={updateAccount}
+          />
+        );
+      case 'users':
+        return (
+          <UserManagement 
+            currentUser={state.currentUser!} 
+            users={state.users} 
+            onUpdateUser={handleUpdateUser} 
           />
         );
       case 'reports':

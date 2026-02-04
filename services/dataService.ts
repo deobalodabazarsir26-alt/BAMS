@@ -73,6 +73,23 @@ export const updateVerificationOnSheet = async (bloId: string, verified: 'yes' |
   }
 };
 
+export const updateUserOnSheet = async (user: User): Promise<{success: boolean, message?: string}> => {
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'updateUser',
+        payload: user
+      })
+    });
+    const res = await response.json();
+    return res;
+  } catch (error) {
+    console.error("Update User Error:", error);
+    return { success: false, message: error.toString() };
+  }
+};
+
 export const addBankOnSheet = async (bank: Bank): Promise<boolean> => {
   try {
     const response = await fetch(API_URL, {
