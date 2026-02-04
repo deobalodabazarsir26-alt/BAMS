@@ -7,6 +7,145 @@ interface UserManagementProps {
   onUpdateUser: (updatedUser: User) => Promise<void>;
 }
 
+interface UserEditFormProps {
+  isSelf: boolean;
+  isAdmin: boolean;
+  isSaving: boolean;
+  editForm: User | null;
+  setEditForm: React.Dispatch<React.SetStateAction<User | null>>;
+  handleSave: (e: React.FormEvent) => Promise<void>;
+  onBack?: () => void;
+}
+
+const UserEditForm: React.FC<UserEditFormProps> = ({ 
+  isSelf, 
+  isAdmin, 
+  isSaving, 
+  editForm, 
+  setEditForm, 
+  handleSave, 
+  onBack 
+}) => (
+  <div className="card shadow-lg border-0 mb-4">
+    <div className="card-header bg-primary text-white py-3 border-0">
+      <h5 className="mb-0 fw-bold d-flex align-items-center">
+        <i className={`bi ${isSelf ? 'bi-person-circle' : 'bi-person-gear'} me-2`}></i>
+        {isSelf ? 'My Official Profile' : `Update System Record: ${editForm?.Officer_Name}`}
+      </h5>
+    </div>
+    <div className="card-body p-4 bg-white">
+      <form onSubmit={handleSave}>
+        <div className="row g-4">
+          <div className="col-md-6">
+            <label className="form-label extra-small fw-bold text-muted text-uppercase mb-2">Officer Full Name</label>
+            <div className="input-group">
+              <span className="input-group-text bg-light border-end-0"><i className="bi bi-person-fill text-primary"></i></span>
+              <input 
+                type="text" 
+                className="form-control border-start-0 bg-light" 
+                value={editForm?.Officer_Name || ''} 
+                onChange={e => setEditForm(prev => prev ? {...prev, Officer_Name: e.target.value} : null)}
+                required
+              />
+            </div>
+          </div>
+          <div className="col-md-6">
+            <label className="form-label extra-small fw-bold text-muted text-uppercase mb-2">Mobile Number (Contact)</label>
+            <div className="input-group">
+              <span className="input-group-text bg-light border-end-0"><i className="bi bi-phone-fill text-primary"></i></span>
+              <input 
+                type="text" 
+                className="form-control border-start-0 bg-light" 
+                value={editForm?.Mobile || ''} 
+                onChange={e => setEditForm(prev => prev ? {...prev, Mobile: e.target.value} : null)}
+                required
+              />
+            </div>
+          </div>
+          <div className="col-md-6">
+            <label className="form-label extra-small fw-bold text-muted text-uppercase mb-2">Login User ID (Permanent)</label>
+            <div className="input-group shadow-sm">
+              <span className="input-group-text bg-white border-end-0"><i className="bi bi-shield-lock-fill text-muted"></i></span>
+              <input 
+                type="text" 
+                className="form-control border-start-0 bg-light-subtle" 
+                value={editForm?.User_Name || ''} 
+                disabled
+              />
+            </div>
+          </div>
+          <div className="col-md-6">
+            <label className="form-label extra-small fw-bold text-muted text-uppercase mb-2">Portal Password</label>
+            <div className="input-group shadow-sm">
+              <span className="input-group-text bg-white border-end-0"><i className="bi bi-key-fill text-warning"></i></span>
+              <input 
+                type="text" 
+                className="form-control border-start-0" 
+                value={editForm?.Password || ''} 
+                onChange={e => setEditForm(prev => prev ? {...prev, Password: e.target.value} : null)}
+                required
+                placeholder="Set new portal password"
+              />
+            </div>
+          </div>
+          <div className="col-md-6">
+            <label className="form-label extra-small fw-bold text-muted text-uppercase mb-2">Official Designation</label>
+            <div className="input-group">
+              <span className="input-group-text bg-light border-end-0"><i className="bi bi-briefcase-fill text-primary"></i></span>
+              <input 
+                type="text" 
+                className="form-control border-start-0 bg-light" 
+                value={editForm?.Designation || ''} 
+                onChange={e => setEditForm(prev => prev ? {...prev, Designation: e.target.value} : null)}
+                disabled={!isAdmin}
+              />
+            </div>
+          </div>
+          {isAdmin && (
+            <div className="col-md-6">
+              <label className="form-label extra-small fw-bold text-muted text-uppercase mb-2">System Access Level</label>
+              <div className="input-group">
+                <span className="input-group-text bg-light border-end-0"><i className="bi bi-ui-checks-grid text-primary"></i></span>
+                <select 
+                  className="form-select border-start-0 bg-light" 
+                  value={editForm?.User_Type} 
+                  onChange={e => setEditForm(prev => prev ? {...prev, User_Type: e.target.value as UserType} : null)}
+                >
+                  <option value={UserType.ADMIN}>Administrator</option>
+                  <option value={UserType.TEHSIL}>Tehsil Level User</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-5 d-flex gap-3 justify-content-end align-items-center">
+          {isAdmin && onBack && (
+            <button 
+              type="button" 
+              className="btn btn-outline-secondary px-4 fw-bold" 
+              onClick={onBack}
+            >
+              Back to Directory
+            </button>
+          )}
+          <button 
+            type="submit" 
+            className="btn btn-primary px-5 py-2 shadow-lg fw-bold" 
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <><span className="spinner-border spinner-border-sm me-2"></span>Saving Changes...</>
+            ) : (
+              <><i className="bi bi-cloud-arrow-up-fill me-2"></i> Update Official Record</>
+            )}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+);
+
 const UserManagement: React.FC<UserManagementProps> = ({ currentUser, users, onUpdateUser }) => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState<User | null>(null);
@@ -15,7 +154,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser, users, onU
 
   const isAdmin = currentUser.User_Type === UserType.ADMIN;
 
-  // CRITICAL FIX: Ensure existing record is brought in on mount for non-admins
+  // Ensure existing record is brought in on mount for non-admins
   useEffect(() => {
     if (!isAdmin) {
       setEditForm({ ...currentUser });
@@ -52,127 +191,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser, users, onU
     u.User_Name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const UserEditForm = ({ isSelf }: { isSelf: boolean }) => (
-    <div className="card shadow-lg border-0 mb-4">
-      <div className="card-header bg-primary text-white py-3 border-0">
-        <h5 className="mb-0 fw-bold d-flex align-items-center">
-          <i className={`bi ${isSelf ? 'bi-person-circle' : 'bi-person-gear'} me-2`}></i>
-          {isSelf ? 'My Official Profile' : `Update System Record: ${editForm?.Officer_Name}`}
-        </h5>
-      </div>
-      <div className="card-body p-4 bg-white">
-        <form onSubmit={handleSave}>
-          <div className="row g-4">
-            <div className="col-md-6">
-              <label className="form-label extra-small fw-bold text-muted text-uppercase mb-2">Officer Full Name</label>
-              <div className="input-group">
-                <span className="input-group-text bg-light border-end-0"><i className="bi bi-person-fill text-primary"></i></span>
-                <input 
-                  type="text" 
-                  className="form-control border-start-0 bg-light" 
-                  value={editForm?.Officer_Name || ''} 
-                  onChange={e => setEditForm(prev => prev ? {...prev, Officer_Name: e.target.value} : null)}
-                  required
-                />
-              </div>
-            </div>
-            <div className="col-md-6">
-              <label className="form-label extra-small fw-bold text-muted text-uppercase mb-2">Mobile Number (Contact)</label>
-              <div className="input-group">
-                <span className="input-group-text bg-light border-end-0"><i className="bi bi-phone-fill text-primary"></i></span>
-                <input 
-                  type="text" 
-                  className="form-control border-start-0 bg-light" 
-                  value={editForm?.Mobile || ''} 
-                  onChange={e => setEditForm(prev => prev ? {...prev, Mobile: e.target.value} : null)}
-                  required
-                />
-              </div>
-            </div>
-            <div className="col-md-6">
-              <label className="form-label extra-small fw-bold text-muted text-uppercase mb-2">Login User ID (Permanent)</label>
-              <div className="input-group shadow-sm">
-                <span className="input-group-text bg-white border-end-0"><i className="bi bi-shield-lock-fill text-muted"></i></span>
-                <input 
-                  type="text" 
-                  className="form-control border-start-0 bg-light-subtle" 
-                  value={editForm?.User_Name || ''} 
-                  disabled
-                />
-              </div>
-            </div>
-            <div className="col-md-6">
-              <label className="form-label extra-small fw-bold text-muted text-uppercase mb-2">Portal Password</label>
-              <div className="input-group shadow-sm">
-                <span className="input-group-text bg-white border-end-0"><i className="bi bi-key-fill text-warning"></i></span>
-                <input 
-                  type="text" 
-                  className="form-control border-start-0" 
-                  value={editForm?.Password || ''} 
-                  onChange={e => setEditForm(prev => prev ? {...prev, Password: e.target.value} : null)}
-                  required
-                  placeholder="Set new portal password"
-                />
-              </div>
-            </div>
-            <div className="col-md-6">
-              <label className="form-label extra-small fw-bold text-muted text-uppercase mb-2">Official Designation</label>
-              <div className="input-group">
-                <span className="input-group-text bg-light border-end-0"><i className="bi bi-briefcase-fill text-primary"></i></span>
-                <input 
-                  type="text" 
-                  className="form-control border-start-0 bg-light" 
-                  value={editForm?.Designation || ''} 
-                  onChange={e => setEditForm(prev => prev ? {...prev, Designation: e.target.value} : null)}
-                  disabled={!isAdmin}
-                />
-              </div>
-            </div>
-            {isAdmin && (
-              <div className="col-md-6">
-                <label className="form-label extra-small fw-bold text-muted text-uppercase mb-2">System Access Level</label>
-                <div className="input-group">
-                  <span className="input-group-text bg-light border-end-0"><i className="bi bi-ui-checks-grid text-primary"></i></span>
-                  <select 
-                    className="form-select border-start-0 bg-light" 
-                    value={editForm?.User_Type} 
-                    onChange={e => setEditForm(prev => prev ? {...prev, User_Type: e.target.value as UserType} : null)}
-                  >
-                    <option value={UserType.ADMIN}>Administrator</option>
-                    <option value={UserType.TEHSIL}>Tehsil Level User</option>
-                  </select>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="mt-5 d-flex gap-3 justify-content-end align-items-center">
-            {isAdmin && selectedUser && (
-              <button 
-                type="button" 
-                className="btn btn-outline-secondary px-4 fw-bold" 
-                onClick={() => { setSelectedUser(null); setEditForm(null); }}
-              >
-                Back to Directory
-              </button>
-            )}
-            <button 
-              type="submit" 
-              className="btn btn-primary px-5 py-2 shadow-lg fw-bold" 
-              disabled={isSaving}
-            >
-              {isSaving ? (
-                <><span className="spinner-border spinner-border-sm me-2"></span>Saving Changes...</>
-              ) : (
-                <><i className="bi bi-cloud-arrow-up-fill me-2"></i> Update Official Record</>
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-
   return (
     <div className="container-fluid py-2">
       <div className="d-flex justify-content-between align-items-center mb-4">
@@ -190,7 +208,15 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser, users, onU
             {selectedUser ? (
               <div className="row justify-content-center">
                 <div className="col-lg-10">
-                  <UserEditForm isSelf={selectedUser.User_ID === currentUser.User_ID} />
+                  <UserEditForm 
+                    isSelf={selectedUser.User_ID === currentUser.User_ID}
+                    isAdmin={isAdmin}
+                    isSaving={isSaving}
+                    editForm={editForm}
+                    setEditForm={setEditForm}
+                    handleSave={handleSave}
+                    onBack={() => { setSelectedUser(null); setEditForm(null); }}
+                  />
                 </div>
               </div>
             ) : (
@@ -269,7 +295,14 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser, users, onU
       ) : (
         <div className="row justify-content-center">
           <div className="col-lg-8">
-            <UserEditForm isSelf={true} />
+            <UserEditForm 
+              isSelf={true}
+              isAdmin={isAdmin}
+              isSaving={isSaving}
+              editForm={editForm}
+              setEditForm={setEditForm}
+              handleSave={handleSave}
+            />
             <div className="mt-4 card border-0 shadow-sm bg-primary bg-opacity-10 p-4 border-start border-primary border-5">
                <h6 className="fw-bold text-primary mb-2"><i className="bi bi-shield-lock-fill me-2"></i> Access Credentials</h6>
                <p className="small text-muted mb-0">
