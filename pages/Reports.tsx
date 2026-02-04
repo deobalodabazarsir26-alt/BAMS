@@ -10,20 +10,22 @@ interface ReportsProps {
 const Reports: React.FC<ReportsProps> = ({ user, accounts, users }) => {
   const isAdmin = user.User_Type === UserType.ADMIN;
 
-  // Calculate Global Stats - Safely cast Account_Number to String before trimming
-  const globalTotal = accounts.length;
-  const globalEntered = accounts.filter(a => a.Account_Number && String(a.Account_Number).trim() !== '').length;
-  const globalVerified = accounts.filter(a => a.Verified === 'yes').length;
+  // Filter accounts based on user role for the summary metrics
+  const displayedAccounts = isAdmin 
+    ? accounts 
+    : accounts.filter(a => String(a.User_ID).trim() === String(user.User_ID).trim());
 
-  // User Stats (For Admin Table)
-  const userBreakdown = users.map(u => {
+  const globalTotal = displayedAccounts.length;
+  const globalEntered = displayedAccounts.filter(a => a.Account_Number && String(a.Account_Number).trim() !== '').length;
+  const globalVerified = displayedAccounts.filter(a => a.Verified === 'yes').length;
+
+  // User Breakdown logic - only relevant/shown for Admins
+  const userBreakdown = isAdmin ? users.map(u => {
     const userAccounts = accounts.filter(a => String(a.User_ID).trim() === String(u.User_ID).trim());
     const total = userAccounts.length;
-    // Safely cast Account_Number to String before trimming
     const entered = userAccounts.filter(a => a.Account_Number && String(a.Account_Number).trim() !== '').length;
     const verified = userAccounts.filter(a => a.Verified === 'yes').length;
     
-    // Group by Tehsil - usually first user of a Tehsil identifies it, but accounts have the Tehsil field
     const tehsilName = userAccounts.length > 0 ? userAccounts[0].Tehsil : 'N/A';
 
     return {
@@ -36,15 +38,19 @@ const Reports: React.FC<ReportsProps> = ({ user, accounts, users }) => {
       entryProgress: total > 0 ? Math.round((entered / total) * 100) : 0,
       verifyProgress: total > 0 ? Math.round((verified / total) * 100) : 0
     };
-  }).filter(u => u.total > 0); // Only show users with assigned accounts
+  }).filter(u => u.total > 0) : [];
 
   return (
     <div className="container-fluid py-2">
       <div className="row mb-4">
         <div className="col">
           <div className="card shadow-sm p-4 border-0">
-            <h3 className="fw-bold mb-1">System Audit & Reports</h3>
-            <p className="text-muted small mb-0">Track account entry progress and verification milestones across the district.</p>
+            <h3 className="fw-bold mb-1">{isAdmin ? 'District Audit & Reports' : 'My Progress Report'}</h3>
+            <p className="text-muted small mb-0">
+              {isAdmin 
+                ? 'Track account entry progress and verification milestones across the entire district.' 
+                : 'Summary of your assigned Booth Level Officer account entries and verification status.'}
+            </p>
           </div>
         </div>
       </div>
@@ -54,7 +60,7 @@ const Reports: React.FC<ReportsProps> = ({ user, accounts, users }) => {
           <div className="card h-100 border-0 shadow-sm bg-primary text-white p-4">
             <div className="d-flex justify-content-between">
               <div>
-                <div className="small text-uppercase opacity-75 fw-bold mb-1">Total Assigned Parts</div>
+                <div className="small text-uppercase opacity-75 fw-bold mb-1">{isAdmin ? 'Total Assigned Parts' : 'My Assigned Parts'}</div>
                 <h2 className="fw-bold mb-0">{globalTotal}</h2>
               </div>
               <i className="bi bi-people-fill fs-1 opacity-25"></i>
@@ -65,7 +71,7 @@ const Reports: React.FC<ReportsProps> = ({ user, accounts, users }) => {
           <div className="card h-100 border-0 shadow-sm bg-info text-white p-4">
             <div className="d-flex justify-content-between">
               <div>
-                <div className="small text-uppercase opacity-75 fw-bold mb-1">Account Entries Done</div>
+                <div className="small text-uppercase opacity-75 fw-bold mb-1">Entries Completed</div>
                 <h2 className="fw-bold mb-0">{globalEntered}</h2>
                 <div className="extra-small opacity-75 mt-2">
                   {globalTotal > 0 ? Math.round((globalEntered / globalTotal) * 100) : 0}% Completion
@@ -79,10 +85,10 @@ const Reports: React.FC<ReportsProps> = ({ user, accounts, users }) => {
           <div className="card h-100 border-0 shadow-sm bg-success text-white p-4">
             <div className="d-flex justify-content-between">
               <div>
-                <div className="small text-uppercase opacity-75 fw-bold mb-1">Total Verifications</div>
+                <div className="small text-uppercase opacity-75 fw-bold mb-1">Verified Records</div>
                 <h2 className="fw-bold mb-0">{globalVerified}</h2>
                 <div className="extra-small opacity-75 mt-2">
-                  {globalEntered > 0 ? Math.round((globalVerified / globalEntered) * 100) : 0}% Verified (of entries)
+                  {globalEntered > 0 ? Math.round((globalVerified / globalEntered) * 100) : 0}% Verification Rate
                 </div>
               </div>
               <i className="bi bi-shield-check fs-1 opacity-25"></i>
@@ -153,11 +159,60 @@ const Reports: React.FC<ReportsProps> = ({ user, accounts, users }) => {
           </div>
         </div>
       ) : (
-        <div className="alert alert-info border-0 shadow-sm d-flex align-items-center p-4">
-          <i className="bi bi-info-circle-fill fs-3 me-3"></i>
-          <div>
-            <h6 className="fw-bold mb-1">Personal Progress Summary</h6>
-            <p className="mb-0 small">As a Tehsil-level officer, you have completed <strong>{globalEntered}</strong> entries and <strong>{globalVerified}</strong> verifications for your assigned <strong>{globalTotal}</strong> Booths.</p>
+        <div className="row g-4">
+          <div className="col-md-6">
+            <div className="card border-0 shadow-sm p-4 h-100">
+              <h5 className="fw-bold mb-3 d-flex align-items-center text-info">
+                <i className="bi bi-info-circle me-2"></i>
+                Entry Status
+              </h5>
+              <p className="text-muted small">
+                You have finished bank account entry for <strong>{globalEntered}</strong> out of <strong>{globalTotal}</strong> assigned booth parts. 
+                {globalTotal - globalEntered > 0 
+                  ? ` Please complete the remaining ${globalTotal - globalEntered} entries to reach 100%.`
+                  : " Great job! All your assigned booths have bank details submitted."}
+              </p>
+              <div className="mt-auto">
+                <div className="d-flex justify-content-between mb-1 extra-small fw-bold text-muted">
+                  <span>PROGRESS</span>
+                  <span>{globalTotal > 0 ? Math.round((globalEntered/globalTotal)*100) : 0}%</span>
+                </div>
+                <div className="progress" style={{ height: '8px' }}>
+                  <div 
+                    className="progress-bar bg-info" 
+                    role="progressbar" 
+                    style={{ width: `${globalTotal > 0 ? (globalEntered/globalTotal)*100 : 0}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-6">
+            <div className="card border-0 shadow-sm p-4 h-100">
+              <h5 className="fw-bold mb-3 d-flex align-items-center text-success">
+                <i className="bi bi-patch-check me-2"></i>
+                Verification Summary
+              </h5>
+              <p className="text-muted small">
+                <strong>{globalVerified}</strong> of your submitted records have been verified by the district administrator. 
+                {globalEntered - globalVerified > 0 
+                  ? ` Currently, ${globalEntered - globalVerified} entered records are awaiting verification.`
+                  : " All your submitted records have successfully passed verification."}
+              </p>
+              <div className="mt-auto">
+                <div className="d-flex justify-content-between mb-1 extra-small fw-bold text-muted">
+                  <span>VERIFICATION RATE</span>
+                  <span>{globalEntered > 0 ? Math.round((globalVerified/globalEntered)*100) : 0}%</span>
+                </div>
+                <div className="progress" style={{ height: '8px' }}>
+                  <div 
+                    className="progress-bar bg-success" 
+                    role="progressbar" 
+                    style={{ width: `${globalEntered > 0 ? (globalVerified/globalEntered)*100 : 0}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

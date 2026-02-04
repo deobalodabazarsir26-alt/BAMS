@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BLOAccount, User, UserType, Bank, BankBranch, Department, Designation } from '../types';
 import { searchIFSCViaGemini } from '../services/geminiService';
-// Dynamic imports for export libraries
-import * as XLSX from 'https://esm.sh/xlsx';
-import { jsPDF } from 'https://esm.sh/jspdf';
-import autoTable from 'https://esm.sh/jspdf-autotable';
+// Use standard imports for libraries added to package.json
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface VerificationProps {
   user: User;
