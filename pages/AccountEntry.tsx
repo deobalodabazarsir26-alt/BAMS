@@ -162,8 +162,8 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editForm) {
-      if (!editForm.Account_Number || !editForm.IFSC_Code) {
-        alert("Account Number and IFSC Code are mandatory.");
+      if (!editForm.Account_Number || !editForm.IFSC_Code || !editForm.Account_Passbook_Doc) {
+        alert("Account Number, IFSC Code, and Passbook Document are mandatory fields.");
         return;
       }
       onUpdate(editForm, stagedBank || undefined, stagedBranch || undefined);
@@ -172,6 +172,47 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
       setStagedBank(null);
       setStagedBranch(null);
     }
+  };
+
+  const renderPreview = (doc: string) => {
+    if (!doc) return null;
+
+    // Handle Google Drive links
+    if (doc.includes('drive.google.com')) {
+      const previewUrl = doc.replace('/view?usp=sharing', '/preview').replace('/view', '/preview');
+      return (
+        <iframe 
+          src={previewUrl} 
+          className="w-100 rounded border-0 shadow-sm" 
+          style={{ height: '500px' }}
+          title="Drive Document Preview"
+        ></iframe>
+      );
+    }
+
+    // Handle local browse (Base64) PDF
+    if (doc.startsWith('data:application/pdf')) {
+      return (
+        <iframe 
+          src={doc} 
+          className="w-100 rounded border-0" 
+          style={{ height: '500px' }} 
+          title="PDF Preview"
+        ></iframe>
+      );
+    } 
+    
+    // Handle local browse (Base64) Image
+    if (doc.startsWith('data:image')) {
+      return <img src={doc} alt="Passbook" className="img-fluid" style={{ maxHeight: '500px' }} />;
+    }
+
+    return (
+      <div className="alert alert-secondary py-3 text-center">
+        <i className="bi bi-file-earmark-text fs-2 mb-2 d-block"></i>
+        <span>Unsupported document format for instant preview. <a href={doc} target="_blank" rel="noreferrer">Open in new tab</a></span>
+      </div>
+    );
   };
 
   if (selectedBLO && editForm) {
@@ -313,12 +354,12 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                 <div className="card-body p-4 bg-white border-start border-primary border-5 rounded-end">
                   <h6 className="text-primary fw-bold text-uppercase small mb-4 d-flex align-items-center">
                     <i className="bi bi-credit-card-2-front me-2"></i>
-                    Account Details
+                    Account Details <span className="text-danger ms-2 fw-normal" style={{ fontSize: '0.6rem' }}>(All Fields Required)</span>
                   </h6>
                   <div className="row g-4">
                     <div className="col-md-6">
                       <div className="p-3 border rounded-3 bg-light">
-                        <label className="form-label fw-bold text-dark mb-2">IFSC Code</label>
+                        <label className="form-label fw-bold text-dark mb-2">IFSC Code <span className="text-danger">*</span></label>
                         <div className="input-group input-group-lg shadow-sm">
                           <input 
                             disabled={isLocked} 
@@ -328,6 +369,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                             maxLength={11}
                             value={editForm.IFSC_Code} 
                             onChange={e => setEditForm({...editForm, IFSC_Code: e.target.value.toUpperCase().trim()})} 
+                            required
                           />
                           <button 
                             type="button" 
@@ -364,7 +406,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                     </div>
                     <div className="col-md-6">
                       <div className="p-3 border rounded-3 bg-light">
-                        <label className="form-label fw-bold text-dark mb-2">Account Number</label>
+                        <label className="form-label fw-bold text-dark mb-2">Account Number <span className="text-danger">*</span></label>
                         <input 
                           disabled={isLocked} 
                           type="text" 
@@ -372,13 +414,14 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                           placeholder="Enter Full Account Number"
                           value={editForm.Account_Number} 
                           onChange={e => setEditForm({...editForm, Account_Number: e.target.value.replace(/\D/g, '')})} 
+                          required
                         />
                         <div className="form-text mt-2"><i className="bi bi-info-circle me-1"></i> Digits only. No spaces.</div>
                       </div>
                     </div>
                     <div className="col-12">
-                      <label className="form-label small fw-bold text-secondary">Account Passbook Doc (Upload PDF/JPG)</label>
-                      <input disabled={isLocked} type="file" className="form-control bg-white shadow-sm mb-3" onChange={handleFileChange} accept=".pdf,image/*" />
+                      <label className="form-label small fw-bold text-secondary">Account Passbook Doc (Upload PDF/JPG) <span className="text-danger">*</span></label>
+                      <input disabled={isLocked} type="file" className="form-control bg-white shadow-sm mb-3" onChange={handleFileChange} accept=".pdf,image/*" required={!editForm.Account_Passbook_Doc} />
                       
                       {editForm.Account_Passbook_Doc && (
                         <div className="mt-2">
@@ -386,23 +429,10 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                             <h6 className="fw-bold extra-small text-muted text-uppercase mb-3 d-flex align-items-center">
                               <i className="bi bi-eye me-2"></i>
                               Document Preview
-                              {isFileNew && <span className="ms-auto badge bg-info">Live Preview</span>}
+                              {isFileNew ? <span className="ms-auto badge bg-info">Live Preview</span> : <span className="ms-auto badge bg-success">Existing Cloud File</span>}
                             </h6>
                             <div className="bg-light rounded overflow-hidden d-flex align-items-center justify-content-center" style={{ minHeight: '300px', maxHeight: '500px' }}>
-                              {editForm.Account_Passbook_Doc.startsWith('data:application/pdf') || (editForm.Account_Passbook_Doc.includes('drive.google.com') && editForm.Account_Passbook_Doc.toLowerCase().includes('.pdf')) ? (
-                                <embed 
-                                  src={editForm.Account_Passbook_Doc.includes('drive.google.com') ? editForm.Account_Passbook_Doc.replace('/view', '/preview') : editForm.Account_Passbook_Doc} 
-                                  className="w-100" 
-                                  style={{ height: '500px' }} 
-                                />
-                              ) : (
-                                <img 
-                                  src={editForm.Account_Passbook_Doc.includes('drive.google.com') ? editForm.Account_Passbook_Doc.replace('/view', '/preview') : editForm.Account_Passbook_Doc} 
-                                  alt="Selected Passbook" 
-                                  className="img-fluid"
-                                  style={{ maxHeight: '500px' }}
-                                />
-                              )}
+                              {renderPreview(editForm.Account_Passbook_Doc)}
                             </div>
                           </div>
                           
@@ -413,12 +443,16 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                                 <span>New document selected. The old file on Drive will be replaced upon saving.</span>
                               </div>
                             ) : (
-                              <div className="d-flex align-items-center gap-2">
+                              <div className="d-flex align-items-center gap-2 w-100">
                                 <span className="badge bg-success px-3 py-2 shadow-sm"><i className="bi bi-check2-circle me-1"></i> Cloud Link Active</span>
+                                <span className="small text-muted ms-auto">Using file previously uploaded to Drive.</span>
                               </div>
                             )}
                           </div>
                         </div>
+                      )}
+                      {!editForm.Account_Passbook_Doc && (
+                        <div className="text-danger extra-small mt-1"><i className="bi bi-exclamation-triangle me-1"></i> Passbook document is mandatory for registration.</div>
                       )}
                     </div>
                   </div>

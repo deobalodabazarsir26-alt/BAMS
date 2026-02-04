@@ -22,9 +22,11 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
   
   const isAdmin = user.User_Type === UserType.ADMIN;
   
-  const filteredAccounts = user.User_Type === UserType.ADMIN 
+  // Filter logic: Show only those records for which bank account entry is done (Account_Number is present)
+  const filteredAccounts = (user.User_Type === UserType.ADMIN 
     ? accounts 
-    : accounts.filter(a => String(a.User_ID).trim() === String(user.User_ID).trim());
+    : accounts.filter(a => String(a.User_ID).trim() === String(user.User_ID).trim()))
+    .filter(a => a.Account_Number && String(a.Account_Number).trim() !== '');
 
   const getEntityLabel = (obj: any, preferredKeys: string[]): string => {
     if (!obj) return '---';
@@ -59,6 +61,12 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
 
   const handleSaveEdit = async () => {
     if (!editForm || !onUpdate) return;
+    
+    if (!editForm.Account_Number || !editForm.IFSC_Code) {
+      alert("Account Number and IFSC Code are mandatory for correction.");
+      return;
+    }
+
     onUpdate(editForm);
     setSelectedBLO(editForm);
     setIsEditing(false);
@@ -86,16 +94,27 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
       </div>
     );
 
+    // Handle Google Drive links
     if (doc.includes('drive.google.com')) {
       const previewUrl = doc.replace('/view?usp=sharing', '/preview').replace('/view', '/preview');
       return (
-        <iframe src={previewUrl} className="w-100 h-100 rounded shadow" frameBorder="0"></iframe>
+        <iframe src={previewUrl} title="Drive PDF Viewer" className="w-100 h-100 rounded shadow border-0" frameBorder="0"></iframe>
       );
     }
 
+    // Handle Local Base64 PDF
     if (doc.startsWith('data:application/pdf')) {
-      return <embed src={doc} className="w-100 h-100 rounded shadow" />;
-    } else if (doc.startsWith('data:image')) {
+      return (
+        <iframe 
+          src={doc} 
+          title="Local PDF Viewer"
+          className="w-100 h-100 rounded shadow border-0" 
+        ></iframe>
+      );
+    } 
+    
+    // Handle Local Base64 Image
+    if (doc.startsWith('data:image')) {
       return (
         <img src={doc} alt="Passbook" className="img-fluid rounded shadow-lg m-auto" style={{maxHeight: '90%'}} />
       );
@@ -103,7 +122,7 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
 
     return (
       <div className="text-center p-4">
-        <p>Format not viewable. <a href={doc} target="_blank" rel="noreferrer">Open Link</a></p>
+        <p>Format not instantly viewable. <a href={doc} target="_blank" rel="noreferrer">Open document in new tab</a></p>
       </div>
     );
   };
@@ -117,6 +136,11 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
           </div>
           <div className="card shadow-sm border-0 overflow-hidden">
             <div className="list-group list-group-flush" style={{maxHeight: '75vh', overflowY: 'auto'}}>
+              {filteredAccounts.length === 0 && (
+                <div className="p-4 text-center text-muted italic">
+                  No records with completed bank entries found.
+                </div>
+              )}
               {filteredAccounts.map(blo => (
                 <button
                   key={blo.BLO_ID}
@@ -127,6 +151,7 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
                     <div>
                       <h6 className="fw-bold mb-1">{blo.BLO_Name}</h6>
                       <p className="small text-muted mb-1">P-{blo.Part_No} | {blo.AC_Name}</p>
+                      <div className="extra-small font-monospace text-primary">{blo.Account_Number}</div>
                     </div>
                     {blo.Verified === 'yes' ? (
                       <span className="badge bg-success rounded-circle p-1"><i className="bi bi-check text-white"></i></span>
@@ -164,22 +189,24 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
                     <div className="flex-grow-1">
                       <h6 className="fw-bold text-primary mb-4 text-uppercase extra-small">Quick Detail Correction</h6>
                       <div className="mb-3">
-                        <label className="form-label extra-small fw-bold text-muted">Account Number</label>
+                        <label className="form-label extra-small fw-bold text-muted">Account Number <span className="text-danger">*</span></label>
                         <input 
                           type="text" 
                           className="form-control fw-bold font-monospace" 
                           value={editForm.Account_Number} 
                           onChange={e => setEditForm({...editForm, Account_Number: e.target.value.replace(/\D/g, '')})} 
+                          required
                         />
                       </div>
                       <div className="mb-3">
-                        <label className="form-label extra-small fw-bold text-muted">IFSC Code</label>
+                        <label className="form-label extra-small fw-bold text-muted">IFSC Code <span className="text-danger">*</span></label>
                         <div className="input-group">
                           <input 
                             type="text" 
                             className="form-control font-monospace text-uppercase" 
                             value={editForm.IFSC_Code} 
                             onChange={e => setEditForm({...editForm, IFSC_Code: e.target.value.toUpperCase().trim()})} 
+                            required
                           />
                           <button 
                             className="btn btn-outline-primary" 
@@ -225,7 +252,7 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
                           </div>
                           <div className="col-12 pt-3 mt-2 border-top">
                             <label className="extra-small text-muted text-uppercase fw-bold">Designation</label>
-                            <div className="small fw-semibold">{getEntityLabel(designations.find(d => String(d.Desg_ID).trim() === String(selectedBLO.Desg_ID).trim()), ['Desg_Name', 'Designation', 'Name'])}</div>
+                            <div className="small fw-semibold">{getEntityLabel(designations.find(d => String(d.Dept_ID).trim() === String(selectedBLO.Dept_ID).trim() && String(d.Desg_ID).trim() === String(selectedBLO.Desg_ID).trim()), ['Desg_Name', 'Designation', 'Name'])}</div>
                           </div>
                         </div>
                       </div>
@@ -262,6 +289,9 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
               <i className="bi bi-check2-all text-primary display-1 mb-3"></i>
               <h4 className="fw-bold">Ready for Matching</h4>
               <p className="text-muted">Select an officer to verify their bank details against the uploaded document.</p>
+              <div className="mt-3 badge bg-info-subtle text-info px-3 py-2">
+                Showing {filteredAccounts.length} accounts with completed entries.
+              </div>
             </div>
           </div>
         )}
