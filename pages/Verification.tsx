@@ -231,6 +231,10 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
                     
                     <div className="card border-0 bg-primary bg-opacity-10 mb-3 shadow-sm overflow-hidden">
                        <div className="p-3 text-center">
+                          {/* Added Bank Name */}
+                          <div className="text-secondary extra-small fw-bold text-uppercase mb-1">
+                            {banks.find(b => String(b.Bank_ID).trim() === String(selectedBLO.Bank_ID).trim())?.Bank_Name || '---'}
+                          </div>
                           <label className="fw-bold text-primary text-uppercase mb-1" style={{fontSize: '0.65rem'}}>Account Number</label>
                           <div className="h3 fw-bold text-dark font-monospace mb-0">{selectedBLO.Account_Number}</div>
                        </div>
@@ -238,6 +242,10 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
 
                     <div className="card border-0 bg-info bg-opacity-10 shadow-sm">
                        <div className="p-3 text-center">
+                          {/* Added Branch Name */}
+                          <div className="text-secondary extra-small fw-bold text-uppercase mb-1">
+                            {branches.find(br => String(br.Branch_ID).trim() === String(selectedBLO.Branch_ID).trim())?.Branch_Name || '---'}
+                          </div>
                           <label className="fw-bold text-info text-uppercase mb-1" style={{fontSize: '0.65rem'}}>IFSC Code</label>
                           <div className="h4 fw-bold text-dark font-monospace mb-0">{selectedBLO.IFSC_Code}</div>
                        </div>

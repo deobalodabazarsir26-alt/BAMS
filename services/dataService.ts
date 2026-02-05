@@ -1,7 +1,23 @@
 import { User, BLOAccount, Bank, BankBranch, Department, Designation } from '../types';
 
-// The URL to your Google Apps Script Web App
-const API_URL = 'https://script.google.com/macros/s/AKfycbwslqH_0IS1l7TrWjtqB4qBquQMELv0QOW09I477pLI2jytK_kFp977LNuwUWIJeJz4ow/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzzcYluZ4yqW_4FHxVy5SWT3Za053RFjkewDCTXCkq9a2w_U-M6v0bOfbZzAhCYvebB9A/exec';
+
+/**
+ * Robust fetch wrapper for Google Apps Script to avoid Content-Length errors
+ */
+const safeFetch = async (url: string, options: RequestInit = {}) => {
+  const response = await fetch(url, {
+    ...options,
+    redirect: 'follow'
+  });
+  if (!response.ok) throw new Error(`Network response error: ${response.status}`);
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error("Invalid server response format");
+  }
+};
 
 export const fetchAllData = async (): Promise<{ 
   users: User[], 
@@ -11,113 +27,64 @@ export const fetchAllData = async (): Promise<{
   departments: Department[],
   designations: Designation[]
 }> => {
-  if (!API_URL || API_URL.includes('YOUR_APPS_SCRIPT')) {
-    console.error("API_URL not configured. Ensure the Web App is deployed and URL is pasted in dataService.ts");
-    return { users: [], accounts: [], banks: [], branches: [], departments: [], designations: [] };
-  }
-
   try {
-    const response = await fetch(API_URL);
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const data = await response.json();
-    return data;
+    return await safeFetch(API_URL);
   } catch (error) {
     console.error("Fetch Data Error:", error);
     throw error;
   }
 };
 
-export const runDiagnostics = async (): Promise<any> => {
-  try {
-    const response = await fetch(`${API_URL}?check=true`);
-    const data = await response.json();
-    console.log("Portal Diagnostics Report:", data);
-    return data;
-  } catch (error) {
-    console.error("Diagnostics Request Failed:", error);
-    return { success: false, error: error.toString() };
-  }
-};
-
 export const updateAccountOnSheet = async (account: BLOAccount): Promise<{success: boolean, message?: string}> => {
   try {
-    const response = await fetch(API_URL, {
+    return await safeFetch(API_URL, {
       method: 'POST',
-      body: JSON.stringify({
-        action: 'updateAccount',
-        payload: account
-      })
+      body: JSON.stringify({ action: 'updateAccount', payload: account })
     });
-    const res = await response.json();
-    return res;
   } catch (error) {
-    console.error("Update Account Error:", error);
     return { success: false, message: error.toString() };
   }
 };
 
 export const updateVerificationOnSheet = async (bloId: string, verified: 'yes' | 'no'): Promise<boolean> => {
   try {
-    const response = await fetch(API_URL, {
+    const res = await safeFetch(API_URL, {
       method: 'POST',
-      body: JSON.stringify({
-        action: 'verifyAccount',
-        payload: { BLO_ID: bloId, Verified: verified }
-      })
+      body: JSON.stringify({ action: 'verifyAccount', payload: { BLO_ID: bloId, Verified: verified } })
     });
-    const res = await response.json();
     return res.success;
   } catch (error) {
-    console.error("Verify Account Error:", error);
     return false;
   }
 };
 
 export const updateUserOnSheet = async (user: User): Promise<{success: boolean, message?: string}> => {
   try {
-    const response = await fetch(API_URL, {
+    return await safeFetch(API_URL, {
       method: 'POST',
-      body: JSON.stringify({
-        action: 'updateUser',
-        payload: user
-      })
+      body: JSON.stringify({ action: 'updateUser', payload: user })
     });
-    const res = await response.json();
-    return res;
   } catch (error) {
-    console.error("Update User Error:", error);
     return { success: false, message: error.toString() };
   }
 };
 
 export const addBankOnSheet = async (bank: Bank): Promise<boolean> => {
   try {
-    const response = await fetch(API_URL, {
+    const res = await safeFetch(API_URL, {
       method: 'POST',
-      body: JSON.stringify({
-        action: 'addBank',
-        payload: bank
-      })
+      body: JSON.stringify({ action: 'addBank', payload: bank })
     });
-    const res = await response.json();
     return res.success;
-  } catch (error) {
-    return false;
-  }
+  } catch (error) { return false; }
 };
 
 export const addBranchOnSheet = async (branch: BankBranch): Promise<boolean> => {
   try {
-    const response = await fetch(API_URL, {
+    const res = await safeFetch(API_URL, {
       method: 'POST',
-      body: JSON.stringify({
-        action: 'addBranch',
-        payload: branch
-      })
+      body: JSON.stringify({ action: 'addBranch', payload: branch })
     });
-    const res = await response.json();
     return res.success;
-  } catch (error) {
-    return false;
-  }
+  } catch (error) { return false; }
 };

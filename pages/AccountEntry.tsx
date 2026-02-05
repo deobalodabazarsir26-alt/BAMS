@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { BLOAccount, User, UserType, Bank, BankBranch, Department, Designation } from '../types';
 import { searchIFSCViaGemini } from '../services/geminiService';
 
@@ -17,15 +17,34 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
   const [isSearching, setIsSearching] = useState(false);
   const [editForm, setEditForm] = useState<BLOAccount | null>(null);
   
+  // Filtering States
+  const [filterTehsil, setFilterTehsil] = useState('');
+  const [filterAC, setFilterAC] = useState('');
+  
   const [searchFeedback, setSearchFeedback] = useState<{ type: 'success' | 'error' | 'info' | 'none', message: string }>({ type: 'none', message: '' });
   const [stagedBank, setStagedBank] = useState<Bank | null>(null);
   const [stagedBranch, setStagedBranch] = useState<BankBranch | null>(null);
 
   const lastSearchedRef = useRef<string>('');
+  const isAdmin = user.User_Type === UserType.ADMIN;
 
-  const filteredAccounts = user.User_Type === UserType.ADMIN 
-    ? accounts 
-    : accounts.filter(a => String(a.User_ID).trim() === String(user.User_ID).trim());
+  // Unique Lists for Filters
+  const uniqueTehsils = useMemo(() => Array.from(new Set(accounts.map(a => a.Tehsil))).sort(), [accounts]);
+  const uniqueACs = useMemo(() => Array.from(new Set(accounts.map(a => a.AC_Name))).sort(), [accounts]);
+
+  // Scoped filtering logic
+  const filteredAccounts = useMemo(() => {
+    let list = user.User_Type === UserType.ADMIN 
+      ? accounts 
+      : accounts.filter(a => String(a.User_ID).trim() === String(user.User_ID).trim());
+
+    if (isAdmin) {
+      if (filterTehsil) list = list.filter(a => a.Tehsil === filterTehsil);
+      if (filterAC) list = list.filter(a => a.AC_Name === filterAC);
+    }
+    
+    return list;
+  }, [accounts, user, isAdmin, filterTehsil, filterAC]);
 
   const getEntityLabel = (obj: any, preferredKeys: string[]): string => {
     if (!obj) return '---';
@@ -489,6 +508,34 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
         </div>
       </div>
 
+      {/* Directory Filter Bar - Same as Verification module */}
+      {isAdmin && (
+        <div className="card border-0 shadow-sm bg-white p-3 mb-4">
+          <div className="row g-3 align-items-center">
+            <div className="col-auto">
+              <span className="extra-small fw-bold text-muted text-uppercase"><i className="bi bi-funnel-fill me-1"></i> Quick Filters:</span>
+            </div>
+            <div className="col-md-3">
+              <select className="form-select form-select-sm" value={filterTehsil} onChange={e => setFilterTehsil(e.target.value)}>
+                <option value="">All Tehsils</option>
+                {uniqueTehsils.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className="col-md-3">
+              <select className="form-select form-select-sm" value={filterAC} onChange={e => setFilterAC(e.target.value)}>
+                <option value="">All Assemblies</option>
+                {uniqueACs.map(ac => <option key={ac} value={ac}>{ac}</option>)}
+              </select>
+            </div>
+            <div className="col-auto ms-auto">
+              <button className="btn btn-link btn-sm text-decoration-none extra-small fw-bold p-0" onClick={() => { setFilterTehsil(''); setFilterAC(''); }}>
+                <i className="bi bi-x-circle me-1"></i> Reset Filters
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card border-0 shadow-sm overflow-hidden">
         <div className="table-responsive">
           <table className="table table-hover align-middle mb-0">
@@ -556,6 +603,14 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                   </td>
                 </tr>
               ))}
+              {filteredAccounts.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="text-center py-5 text-muted italic">
+                    <i className="bi bi-search mb-2 fs-2 d-block opacity-25"></i>
+                    No accounts found matching your current filters.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
