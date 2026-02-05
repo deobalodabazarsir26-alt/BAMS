@@ -43,7 +43,25 @@
       background: #1e293b;
       z-index: 1000;
       transition: transform 0.3s ease;
+      /* Fixed: Enable internal scrolling */
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
+    /* Scrollbar Styling for Sidebar */
+    .app-sidebar::-webkit-scrollbar {
+      width: 5px;
+    }
+    .app-sidebar::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    .app-sidebar::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 10px;
+    }
+    .app-sidebar::-webkit-scrollbar-thumb:hover {
+      background: #3b82f6;
+    }
+    
     .main-content {
       margin-left: var(--sidebar-width);
       min-height: 100vh;
