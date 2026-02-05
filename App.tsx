@@ -44,39 +44,38 @@ const App: React.FC = () => {
   useEffect(() => { loadData(); }, []);
 
   const checkDuplicates = (updated: BLOAccount): string | null => {
-    // Combine all lists for a global uniqueness check
     const allAccounts = [
-      ...state.accounts, 
-      ...state.avihitAccounts, 
-      ...state.supervisorAccounts
+      { list: state.accounts, type: 'BLO' },
+      { list: state.avihitAccounts, type: 'Avihit' },
+      { list: state.supervisorAccounts, type: 'Supervisor' }
     ];
 
     const cleanMobile = updated.Mobile.trim();
-    const cleanAccount = updated.Account_Number.trim();
+    const cleanAccount = updated.Account_Number.toString().trim();
     const cleanIFSC = updated.IFSC_Code.trim().toUpperCase();
 
-    for (const acc of allAccounts) {
-      // Skip the current record being edited
-      if (acc.BLO_ID === updated.BLO_ID) continue;
+    for (const entry of allAccounts) {
+      for (const acc of entry.list) {
+        // Skip self
+        if (acc.BLO_ID === updated.BLO_ID) continue;
 
-      // Check Mobile Uniqueness
-      if (acc.Mobile.trim() === cleanMobile) {
-        const identifier = acc.Sector_No ? `Sector: ${acc.Sector_No}` : `Part: ${acc.Part_No}`;
-        return `DUPLICATE MOBILE DETECTED\n\nThe mobile number "${cleanMobile}" is already registered in the system.\n\nExisting Record Details:\n• Name: ${acc.BLO_Name}\n• Assembly: ${acc.AC_Name}\n• ${identifier}\n• Tehsil: ${acc.Tehsil}\n\nPlease use a unique mobile number for this official.`;
-      }
+        const identifier = acc.Sector_No ? `Sector No: ${acc.Sector_No}` : `Part No: ${acc.Part_No}`;
 
-      // Check IFSC + Account Number Uniqueness
-      if (acc.Account_Number.trim() === cleanAccount && acc.IFSC_Code.trim().toUpperCase() === cleanIFSC) {
-        const identifier = acc.Sector_No ? `Sector: ${acc.Sector_No}` : `Part: ${acc.Part_No}`;
-        return `DUPLICATE BANK ACCOUNT DETECTED\n\nThis specific Bank Account (${cleanAccount}) and IFSC (${cleanIFSC}) combination is already assigned to another record.\n\nExisting Record Details:\n• Name: ${acc.BLO_Name}\n• Assembly: ${acc.AC_Name}\n• ${identifier}\n• Tehsil: ${acc.Tehsil}\n\nA bank account cannot be registered more than once in the portal.`;
+        // Check Mobile uniqueness
+        if (acc.Mobile.trim() === cleanMobile) {
+          return `DUPLICATE MOBILE DETECTED\n\nThe mobile number "${cleanMobile}" is already registered.\n\nExisting Record Found in [${entry.type} Accounts]:\n• Name: ${acc.BLO_Name}\n• Assembly: ${acc.AC_Name}\n• ${identifier}\n• Tehsil: ${acc.Tehsil}\n\nPlease verify the official's mobile number.`;
+        }
+
+        // Check Bank Account + IFSC combination uniqueness
+        if (acc.Account_Number.toString().trim() === cleanAccount && acc.IFSC_Code.trim().toUpperCase() === cleanIFSC) {
+          return `DUPLICATE BANK ACCOUNT DETECTED\n\nThis specific Account (${cleanAccount}) and IFSC (${cleanIFSC}) combination is already assigned to another official.\n\nExisting Record Found in [${entry.type} Accounts]:\n• Name: ${acc.BLO_Name}\n• Assembly: ${acc.AC_Name}\n• ${identifier}\n• Tehsil: ${acc.Tehsil}\n\nA bank account cannot be registered for more than one official.`;
+        }
       }
     }
-
     return null;
   };
 
   const updateAccount = useCallback(async (updated: BLOAccount, type: AccountCategory, newBank?: Bank, newBranch?: BankBranch) => {
-    // Perform uniqueness check before any network calls
     const duplicateError = checkDuplicates(updated);
     if (duplicateError) {
       alert(duplicateError);
@@ -85,17 +84,32 @@ const App: React.FC = () => {
 
     setIsLoading(true);
     try {
-      if (newBank) await addBankOnSheet(newBank);
-      if (newBranch) await addBranchOnSheet(newBranch);
+      // Step 1: Add new Bank to directory if staged
+      if (newBank) {
+        const bankRes = await addBankOnSheet(newBank);
+        if (!bankRes) console.warn("Background Bank Addition Failed, proceeding anyway...");
+      }
+      
+      // Step 2: Add new Branch to directory if staged
+      if (newBranch) {
+        const branchRes = await addBranchOnSheet(newBranch);
+        if (!branchRes) console.warn("Background Branch Addition Failed, proceeding anyway...");
+      }
+
+      // Step 3: Update the actual official account
       const result = await updateAccountOnSheet(updated, type);
       if (result.success) { 
         await loadData(); 
-        alert("Record updated successfully."); 
+        alert("Official record and bank directory updated successfully."); 
       }
-      else { alert("Update failed: " + result.message); }
-    } catch (e) { alert("Operation failed."); }
+      else { 
+        alert("Failed to update official record: " + result.message); 
+      }
+    } catch (e) { 
+      alert("An unexpected error occurred during the update process."); 
+    }
     finally { setIsLoading(false); }
-  }, [state.accounts, state.avihitAccounts, state.supervisorAccounts]); // Dependencies for global list access
+  }, [state.accounts, state.avihitAccounts, state.supervisorAccounts, loadData]);
 
   const handleVerify = useCallback(async (bloId: string, verified: 'yes' | 'no', type: AccountCategory) => {
     setIsLoading(true);
@@ -105,7 +119,7 @@ const App: React.FC = () => {
       else { alert("Verification update failed."); }
     } catch (e) { alert("Operation failed."); }
     finally { setIsLoading(false); }
-  }, []);
+  }, [loadData]);
 
   const handleUpdateUser = useCallback(async (updatedUser: User) => {
     setIsLoading(true);
@@ -117,7 +131,7 @@ const App: React.FC = () => {
       } else throw new Error(result.message);
     } catch (e) { alert("Update failed: " + (e as Error).message); }
     finally { setIsLoading(false); }
-  }, [state.currentUser]);
+  }, [state.currentUser, loadData]);
 
   if (!isInitialized) return <div className="min-vh-100 d-flex align-items-center justify-content-center">Loading...</div>;
   if (!state.currentUser) return <Login users={state.users} onLogin={u => { setState(p => ({...p, currentUser: u})); setCurrentPage('dashboard'); }} />;
