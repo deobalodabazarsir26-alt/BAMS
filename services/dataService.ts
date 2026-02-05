@@ -1,10 +1,7 @@
-import { User, BLOAccount, Bank, BankBranch, Department, Designation } from '../types';
+import { User, BLOAccount, Bank, BankBranch, Department, Designation, AccountCategory } from '../types';
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbzzcYluZ4yqW_4FHxVy5SWT3Za053RFjkewDCTXCkq9a2w_U-M6v0bOfbZzAhCYvebB9A/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwlXpzT6RmtJ_DuJtRX0Helk14mZ3vB7cBisEMyPlMyfwodmjmLqGr4Kd7M9HjToNgtVA/exec';
 
-/**
- * Robust fetch wrapper for Google Apps Script to avoid Content-Length errors
- */
 const safeFetch = async (url: string, options: RequestInit = {}) => {
   const response = await fetch(url, {
     ...options,
@@ -22,6 +19,8 @@ const safeFetch = async (url: string, options: RequestInit = {}) => {
 export const fetchAllData = async (): Promise<{ 
   users: User[], 
   accounts: BLOAccount[], 
+  avihitAccounts: BLOAccount[],
+  supervisorAccounts: BLOAccount[],
   banks: Bank[], 
   branches: BankBranch[],
   departments: Department[],
@@ -35,22 +34,34 @@ export const fetchAllData = async (): Promise<{
   }
 };
 
-export const updateAccountOnSheet = async (account: BLOAccount): Promise<{success: boolean, message?: string}> => {
+export const updateAccountOnSheet = async (account: BLOAccount, type: AccountCategory = 'blo'): Promise<{success: boolean, message?: string}> => {
+  const actionMap: Record<AccountCategory, string> = {
+    blo: 'updateAccount',
+    avihit: 'updateAvihitAccount',
+    supervisor: 'updateSupervisorAccount'
+  };
+
   try {
     return await safeFetch(API_URL, {
       method: 'POST',
-      body: JSON.stringify({ action: 'updateAccount', payload: account })
+      body: JSON.stringify({ action: actionMap[type], payload: account })
     });
   } catch (error) {
     return { success: false, message: error.toString() };
   }
 };
 
-export const updateVerificationOnSheet = async (bloId: string, verified: 'yes' | 'no'): Promise<boolean> => {
+export const updateVerificationOnSheet = async (bloId: string, verified: 'yes' | 'no', type: AccountCategory = 'blo'): Promise<boolean> => {
+  const actionMap: Record<AccountCategory, string> = {
+    blo: 'verifyAccount',
+    avihit: 'verifyAvihitAccount',
+    supervisor: 'verifySupervisorAccount'
+  };
+
   try {
     const res = await safeFetch(API_URL, {
       method: 'POST',
-      body: JSON.stringify({ action: 'verifyAccount', payload: { BLO_ID: bloId, Verified: verified } })
+      body: JSON.stringify({ action: actionMap[type], payload: { BLO_ID: bloId, Verified: verified } })
     });
     return res.success;
   } catch (error) {

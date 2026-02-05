@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { User, BLOAccount, Bank, BankBranch, AppState, Department, Designation } from './types';
+import { User, BLOAccount, Bank, BankBranch, AppState, Department, Designation, AccountCategory } from './types';
 import { fetchAllData, updateAccountOnSheet, updateVerificationOnSheet, addBankOnSheet, addBranchOnSheet, updateUserOnSheet } from './services/dataService';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -13,6 +13,8 @@ const App: React.FC = () => {
   const [state, setState] = useState<AppState>({
     currentUser: null,
     accounts: [],
+    avihitAccounts: [],
+    supervisorAccounts: [],
     banks: [],
     branches: [],
     users: [],
@@ -32,45 +34,77 @@ const App: React.FC = () => {
       setState(prev => ({ ...prev, ...data }));
     } catch (error) {
       console.error("Could not load data:", error);
-      alert("Error connecting to Cloud Database. Check console and API_URL config.");
+      alert("Cloud Database Error. Check API_URL.");
     } finally {
       setIsLoading(false);
       setIsInitialized(true);
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
-  const handleLogin = (user: User) => {
-    setState(prev => ({ ...prev, currentUser: user }));
-    setCurrentPage('dashboard');
+  const checkDuplicates = (updated: BLOAccount): string | null => {
+    // Combine all lists for a global uniqueness check
+    const allAccounts = [
+      ...state.accounts, 
+      ...state.avihitAccounts, 
+      ...state.supervisorAccounts
+    ];
+
+    const cleanMobile = updated.Mobile.trim();
+    const cleanAccount = updated.Account_Number.trim();
+    const cleanIFSC = updated.IFSC_Code.trim().toUpperCase();
+
+    for (const acc of allAccounts) {
+      // Skip the current record being edited
+      if (acc.BLO_ID === updated.BLO_ID) continue;
+
+      // Check Mobile Uniqueness
+      if (acc.Mobile.trim() === cleanMobile) {
+        const identifier = acc.Sector_No ? `Sector: ${acc.Sector_No}` : `Part: ${acc.Part_No}`;
+        return `DUPLICATE MOBILE DETECTED\n\nThe mobile number "${cleanMobile}" is already registered in the system.\n\nExisting Record Details:\n• Name: ${acc.BLO_Name}\n• Assembly: ${acc.AC_Name}\n• ${identifier}\n• Tehsil: ${acc.Tehsil}\n\nPlease use a unique mobile number for this official.`;
+      }
+
+      // Check IFSC + Account Number Uniqueness
+      if (acc.Account_Number.trim() === cleanAccount && acc.IFSC_Code.trim().toUpperCase() === cleanIFSC) {
+        const identifier = acc.Sector_No ? `Sector: ${acc.Sector_No}` : `Part: ${acc.Part_No}`;
+        return `DUPLICATE BANK ACCOUNT DETECTED\n\nThis specific Bank Account (${cleanAccount}) and IFSC (${cleanIFSC}) combination is already assigned to another record.\n\nExisting Record Details:\n• Name: ${acc.BLO_Name}\n• Assembly: ${acc.AC_Name}\n• ${identifier}\n• Tehsil: ${acc.Tehsil}\n\nA bank account cannot be registered more than once in the portal.`;
+      }
+    }
+
+    return null;
   };
 
-  const handleLogout = () => {
-    setState(prev => ({ ...prev, currentUser: null }));
-  };
+  const updateAccount = useCallback(async (updated: BLOAccount, type: AccountCategory, newBank?: Bank, newBranch?: BankBranch) => {
+    // Perform uniqueness check before any network calls
+    const duplicateError = checkDuplicates(updated);
+    if (duplicateError) {
+      alert(duplicateError);
+      return;
+    }
 
-  const updateAccount = useCallback(async (updated: BLOAccount, newBank?: Bank, newBranch?: BankBranch) => {
     setIsLoading(true);
     try {
       if (newBank) await addBankOnSheet(newBank);
       if (newBranch) await addBranchOnSheet(newBranch);
-      
-      const result = await updateAccountOnSheet(updated);
-      if (result.success) {
-        // Refresh local state
-        await loadData();
-        alert("Record updated successfully to Cloud Database.");
-      } else {
-        alert("Failed to update record: " + (result.message || "Unknown error occurred on server."));
+      const result = await updateAccountOnSheet(updated, type);
+      if (result.success) { 
+        await loadData(); 
+        alert("Record updated successfully."); 
       }
-    } catch (e) {
-      alert("Operation failed: " + (e as Error).message);
-    } finally {
-      setIsLoading(false);
-    }
+      else { alert("Update failed: " + result.message); }
+    } catch (e) { alert("Operation failed."); }
+    finally { setIsLoading(false); }
+  }, [state.accounts, state.avihitAccounts, state.supervisorAccounts]); // Dependencies for global list access
+
+  const handleVerify = useCallback(async (bloId: string, verified: 'yes' | 'no', type: AccountCategory) => {
+    setIsLoading(true);
+    try {
+      const success = await updateVerificationOnSheet(bloId, verified, type);
+      if (success) { await loadData(); }
+      else { alert("Verification update failed."); }
+    } catch (e) { alert("Operation failed."); }
+    finally { setIsLoading(false); }
   }, []);
 
   const handleUpdateUser = useCallback(async (updatedUser: User) => {
@@ -78,132 +112,46 @@ const App: React.FC = () => {
     try {
       const result = await updateUserOnSheet(updatedUser);
       if (result.success) {
-        if (state.currentUser?.User_ID === updatedUser.User_ID) {
-          setState(prev => ({ ...prev, currentUser: updatedUser }));
-        }
+        if (state.currentUser?.User_ID === updatedUser.User_ID) setState(prev => ({ ...prev, currentUser: updatedUser }));
         await loadData();
-      } else {
-        throw new Error(result.message);
-      }
-    } catch (e) {
-      alert("Update failed: " + (e as Error).message);
-    } finally {
-      setIsLoading(false);
-    }
+      } else throw new Error(result.message);
+    } catch (e) { alert("Update failed: " + (e as Error).message); }
+    finally { setIsLoading(false); }
   }, [state.currentUser]);
 
-  const handleVerify = useCallback(async (bloId: string, verified: 'yes' | 'no') => {
-    setIsLoading(true);
-    try {
-      const success = await updateVerificationOnSheet(bloId, verified);
-      if (success) {
-        await loadData();
-      } else {
-        alert("Verification update failed.");
-      }
-    } catch (e) {
-      alert("Operation failed.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  if (!isInitialized) {
-    return (
-      <div className="min-vh-100 d-flex flex-column align-items-center justify-content-center bg-light">
-        <div className="spinner-border text-primary mb-3" role="status"></div>
-        <div className="fw-bold text-muted">Connecting to Cloud Database...</div>
-      </div>
-    );
-  }
-
-  if (!state.currentUser) {
-    return <Login users={state.users} onLogin={handleLogin} />;
-  }
+  if (!isInitialized) return <div className="min-vh-100 d-flex align-items-center justify-content-center">Loading...</div>;
+  if (!state.currentUser) return <Login users={state.users} onLogin={u => { setState(p => ({...p, currentUser: u})); setCurrentPage('dashboard'); }} />;
 
   const renderContent = () => {
+    if (currentPage.startsWith('entry-')) {
+      const type = currentPage.split('-')[1] as AccountCategory;
+      const data = type === 'blo' ? state.accounts : type === 'avihit' ? state.avihitAccounts : state.supervisorAccounts;
+      return <AccountEntry type={type} accounts={data} user={state.currentUser!} banks={state.banks} branches={state.branches} departments={state.departments} designations={state.designations} onUpdate={updateAccount} />;
+    }
+    if (currentPage.startsWith('verification-')) {
+      const type = currentPage.split('-')[1] as AccountCategory;
+      const data = type === 'blo' ? state.accounts : type === 'avihit' ? state.avihitAccounts : state.supervisorAccounts;
+      return <Verification type={type} accounts={data} user={state.currentUser!} banks={state.banks} branches={state.branches} departments={state.departments} designations={state.designations} onVerify={handleVerify} />;
+    }
+    if (currentPage.startsWith('reports-')) {
+      const type = currentPage.split('-')[1] as AccountCategory;
+      const data = type === 'blo' ? state.accounts : type === 'avihit' ? state.avihitAccounts : state.supervisorAccounts;
+      return <Reports type={type} accounts={data} users={state.users} user={state.currentUser!} />;
+    }
+
     switch (currentPage) {
-      case 'dashboard':
-        return <Dashboard user={state.currentUser!} accounts={state.accounts} />;
-      case 'entry':
-        return (
-          <AccountEntry 
-            user={state.currentUser!} 
-            accounts={state.accounts} 
-            banks={state.banks} 
-            branches={state.branches}
-            departments={state.departments}
-            designations={state.designations}
-            onUpdate={updateAccount}
-          />
-        );
-      case 'verification':
-        return (
-          <Verification 
-            user={state.currentUser!} 
-            accounts={state.accounts}
-            banks={state.banks} 
-            branches={state.branches}
-            departments={state.departments}
-            designations={state.designations}
-            onVerify={handleVerify}
-            onUpdate={updateAccount}
-          />
-        );
-      case 'users':
-        return (
-          <UserManagement 
-            currentUser={state.currentUser!} 
-            users={state.users} 
-            onUpdateUser={handleUpdateUser} 
-          />
-        );
-      case 'reports':
-        return (
-          <Reports 
-            user={state.currentUser!} 
-            accounts={state.accounts} 
-            users={state.users}
-          />
-        );
-      default:
-        return <Dashboard user={state.currentUser!} accounts={state.accounts} />;
+      case 'dashboard': return <Dashboard user={state.currentUser!} accounts={[...state.accounts, ...state.avihitAccounts, ...state.supervisorAccounts]} />;
+      case 'users': return <UserManagement currentUser={state.currentUser!} users={state.users} onUpdateUser={handleUpdateUser} />;
+      default: return <Dashboard user={state.currentUser!} accounts={[...state.accounts, ...state.avihitAccounts, ...state.supervisorAccounts]} />;
     }
   };
 
   return (
     <div className="app-container">
-      {isLoading && (
-        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center bg-white bg-opacity-75 z-3" style={{ zIndex: 9999 }}>
-          <div className="text-center">
-            <div className="spinner-border text-primary" role="status"></div>
-            <p className="mt-2 fw-bold text-primary">Synchronizing...</p>
-          </div>
-        </div>
-      )}
-
-      <Sidebar 
-        user={state.currentUser!} 
-        currentPage={currentPage} 
-        onNavigate={setCurrentPage} 
-        isOpen={isSidebarOpen}
-        setIsOpen={setIsSidebarOpen}
-        onLogout={handleLogout}
-      />
-      
+      {isLoading && <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center bg-white bg-opacity-75 z-3"><div className="spinner-border text-primary"></div></div>}
+      <Sidebar user={state.currentUser!} currentPage={currentPage} onNavigate={setCurrentPage} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} onLogout={() => setState(p => ({...p, currentUser: null}))} />
       <div className="main-content">
-        <div className="d-lg-none bg-white shadow-sm p-3 mb-4 rounded-3 d-flex justify-content-between align-items-center">
-          <div className="d-flex align-items-center">
-            <div className="bg-primary rounded-2 p-1 me-2">
-              <i className="bi bi-shield-check text-white fs-5"></i>
-            </div>
-            <h5 className="mb-0 fw-bold">ACCOUNT PORTAL</h5>
-          </div>
-          <button className="btn btn-light" onClick={() => setIsSidebarOpen(true)}>
-            <i className="bi bi-list fs-4"></i>
-          </button>
-        </div>
-
+        <div className="d-lg-none bg-white p-3 mb-4 d-flex justify-content-between"><h5>ACCOUNT PORTAL</h5><button className="btn btn-light" onClick={() => setIsSidebarOpen(true)}><i className="bi bi-list"></i></button></div>
         {renderContent()}
       </div>
     </div>

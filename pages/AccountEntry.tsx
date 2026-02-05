@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { BLOAccount, User, UserType, Bank, BankBranch, Department, Designation } from '../types';
+import { BLOAccount, User, UserType, Bank, BankBranch, Department, Designation, AccountCategory } from '../types';
 import { searchIFSCViaGemini } from '../services/geminiService';
 
 interface AccountEntryProps {
@@ -9,15 +9,15 @@ interface AccountEntryProps {
   branches: BankBranch[];
   departments: Department[];
   designations: Designation[];
-  onUpdate: (updated: BLOAccount, newBank?: Bank, newBranch?: BankBranch) => void;
+  onUpdate: (updated: BLOAccount, type: AccountCategory, newBank?: Bank, newBranch?: BankBranch) => void;
+  type: AccountCategory;
 }
 
-const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, branches, departments, designations, onUpdate }) => {
+const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, branches, departments, designations, onUpdate, type }) => {
   const [selectedBLO, setSelectedBLO] = useState<BLOAccount | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [editForm, setEditForm] = useState<BLOAccount | null>(null);
   
-  // Filtering States
   const [filterTehsil, setFilterTehsil] = useState('');
   const [filterAC, setFilterAC] = useState('');
   
@@ -28,11 +28,15 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
   const lastSearchedRef = useRef<string>('');
   const isAdmin = user.User_Type === UserType.ADMIN;
 
-  // Unique Lists for Filters
+  const typeLabels: Record<AccountCategory, string> = {
+    blo: 'BLO',
+    avihit: 'Avihit',
+    supervisor: 'Supervisor'
+  };
+
   const uniqueTehsils = useMemo(() => Array.from(new Set(accounts.map(a => a.Tehsil))).sort(), [accounts]);
   const uniqueACs = useMemo(() => Array.from(new Set(accounts.map(a => a.AC_Name))).sort(), [accounts]);
 
-  // Scoped filtering logic
   const filteredAccounts = useMemo(() => {
     let list = user.User_Type === UserType.ADMIN 
       ? accounts 
@@ -53,9 +57,6 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
         return String(obj[key]).trim();
       }
     }
-    const keys = Object.keys(obj);
-    const fallbackKey = keys.find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('designation') || k.toLowerCase().includes('department'));
-    if (fallbackKey) return String(obj[fallbackKey]);
     return 'Unknown';
   };
 
@@ -97,7 +98,6 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
         Bank_ID: localBranch.Bank_ID,
         Branch_ID: localBranch.Branch_ID
       }) : null);
-      
       setSearchFeedback({ type: 'success', message: 'Bank details found in current directory.' });
       setIsSearching(false);
       return;
@@ -142,10 +142,10 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
           message: `Discovered new details! Bank: ${result.bankName}, Branch: ${result.branchName}. This will be added to the directory upon save.` 
         });
       } else {
-        setSearchFeedback({ type: 'error', message: 'Could not find bank details for this IFSC code. Please verify the code.' });
+        setSearchFeedback({ type: 'error', message: 'Could not find bank details for this IFSC code.' });
       }
     } catch (err) {
-      setSearchFeedback({ type: 'error', message: 'Search failed. Please check your internet connection.' });
+      setSearchFeedback({ type: 'error', message: 'Search failed.' });
     } finally {
       setIsSearching(false);
     }
@@ -182,64 +182,32 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
     e.preventDefault();
     if (editForm) {
       if (!editForm.Account_Number || !editForm.IFSC_Code || !editForm.Account_Passbook_Doc) {
-        alert("Account Number, IFSC Code, and Passbook Document are mandatory fields.");
+        alert("Account Number, IFSC Code, and Passbook Document are mandatory.");
         return;
       }
-      onUpdate(editForm, stagedBank || undefined, stagedBranch || undefined);
+      onUpdate(editForm, type, stagedBank || undefined, stagedBranch || undefined);
       setSelectedBLO(null);
       setEditForm(null);
-      setStagedBank(null);
-      setStagedBranch(null);
     }
   };
 
   const renderPreview = (doc: string) => {
     if (!doc) return null;
-
-    // Handle Google Drive links
     if (doc.includes('drive.google.com')) {
       const previewUrl = doc.replace('/view?usp=sharing', '/preview').replace('/view', '/preview');
-      return (
-        <iframe 
-          src={previewUrl} 
-          className="w-100 rounded border-0 shadow-sm" 
-          style={{ height: '500px' }}
-          title="Drive Document Preview"
-        ></iframe>
-      );
+      return <iframe src={previewUrl} className="w-100 rounded border-0 shadow-sm" style={{ height: '500px' }}></iframe>;
     }
-
-    // Handle local browse (Base64) PDF
-    if (doc.startsWith('data:application/pdf')) {
-      return (
-        <iframe 
-          src={doc} 
-          className="w-100 rounded border-0" 
-          style={{ height: '500px' }} 
-          title="PDF Preview"
-        ></iframe>
-      );
-    } 
-    
-    // Handle local browse (Base64) Image
-    if (doc.startsWith('data:image')) {
-      return <img src={doc} alt="Passbook" className="img-fluid" style={{ maxHeight: '500px' }} />;
-    }
-
-    return (
-      <div className="alert alert-secondary py-3 text-center">
-        <i className="bi bi-file-earmark-text fs-2 mb-2 d-block"></i>
-        <span>Unsupported document format for instant preview. <a href={doc} target="_blank" rel="noreferrer">Open in new tab</a></span>
-      </div>
-    );
+    if (doc.startsWith('data:application/pdf')) return <iframe src={doc} className="w-100 rounded border-0" style={{ height: '500px' }}></iframe>;
+    if (doc.startsWith('data:image')) return <img src={doc} alt="Passbook" className="img-fluid" style={{ maxHeight: '500px' }} />;
+    return <div className="alert alert-secondary text-center">Format not instantly viewable.</div>;
   };
 
   if (selectedBLO && editForm) {
     const isLocked = editForm.Verified === 'yes' && user.User_Type !== UserType.ADMIN;
     const isFileNew = editForm.Account_Passbook_Doc && editForm.Account_Passbook_Doc.startsWith('data:');
     
-    const currentBank = banks.find(b => String(b.Bank_ID).trim() === String(editForm.Bank_ID).trim()) || (stagedBank?.Bank_ID === editForm.Bank_ID ? stagedBank : null);
-    const currentBranch = branches.find(br => String(br.Branch_ID).trim() === String(editForm.Branch_ID).trim()) || (stagedBranch?.Branch_ID === editForm.Branch_ID ? stagedBranch : null);
+    const currentBank = banks.find(b => String(b.Bank_ID).trim() === String(editForm.Bank_ID).trim()) || stagedBank;
+    const currentBranch = branches.find(br => String(br.Branch_ID).trim() === String(editForm.Branch_ID).trim()) || stagedBranch;
 
     const availableDesignations = designations.filter(d => 
       editForm.Dept_ID && 
@@ -252,7 +220,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
           <div className="card-header bg-primary text-white p-4 d-flex justify-content-between align-items-center">
             <h5 className="mb-0 fw-bold d-flex align-items-center">
               <i className="bi bi-bank2 me-3 fs-4"></i>
-              Manage Bank Account: {selectedBLO.BLO_Name}
+              Manage {typeLabels[type]} Account: {selectedBLO.BLO_Name}
             </h5>
             <button onClick={() => setSelectedBLO(null)} className="btn-close btn-close-white"></button>
           </div>
@@ -265,67 +233,75 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                 </div>
               )}
 
-              {/* 1. Assembly Details Section - VIEW ONLY */}
+              {/* 1. Administrative Details Section - VIEW ONLY */}
               <div className="card border-0 shadow-sm mb-4 bg-light">
                 <div className="card-body p-4">
                   <h6 className="text-secondary fw-bold text-uppercase small mb-4 d-flex align-items-center">
                     <i className="bi bi-geo-alt-fill me-2"></i>
-                    Assembly Details (View Only)
+                    Administrative Details (View Only)
                   </h6>
                   <div className="row g-3">
                     <div className="col-md-2">
                       <label className="form-label extra-small fw-bold text-muted">AC No.</label>
                       <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.AC_No} />
                     </div>
-                    <div className="col-md-6">
+                    <div className="col-md-4">
                       <label className="form-label extra-small fw-bold text-muted">AC Name</label>
                       <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.AC_Name} />
                     </div>
-                    <div className="col-md-4">
+                    <div className="col-md-3">
                       <label className="form-label extra-small fw-bold text-muted">Tehsil</label>
                       <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.Tehsil} />
                     </div>
-                    <div className="col-md-2">
-                      <label className="form-label extra-small fw-bold text-muted">Part No.</label>
-                      <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.Part_No} />
-                    </div>
-                    <div className="col-md-5">
-                      <label className="form-label extra-small fw-bold text-muted">Part Name (English)</label>
-                      <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.Part_Name_EN} />
-                    </div>
-                    <div className="col-md-5">
-                      <label className="form-label extra-small fw-bold text-muted">Part Name (Hindi)</label>
-                      <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.Part_Name_HI} />
-                    </div>
+                    
+                    {type === 'supervisor' ? (
+                      <div className="col-md-3">
+                        <label className="form-label extra-small fw-bold text-muted">Sector No.</label>
+                        <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.Sector_No || ''} />
+                      </div>
+                    ) : (
+                      <>
+                        <div className="col-md-3">
+                          <label className="form-label extra-small fw-bold text-muted">Part No.</label>
+                          <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.Part_No} />
+                        </div>
+                        <div className="col-md-6">
+                          <label className="form-label extra-small fw-bold text-muted">Part Name (English)</label>
+                          <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.Part_Name_EN} />
+                        </div>
+                        <div className="col-md-6">
+                          <label className="form-label extra-small fw-bold text-muted">Part Name (Hindi)</label>
+                          <input type="text" readOnly disabled className="form-control form-control-sm bg-white-50 border-0" value={editForm.Part_Name_HI} />
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* 2. BLO Details Section */}
+              {/* 2. Personnel Details Section */}
               <div className="card border-0 shadow-sm mb-4">
                 <div className="card-body p-4">
                   <h6 className="text-primary fw-bold text-uppercase small mb-4 d-flex align-items-center">
                     <i className="bi bi-person-badge-fill me-2"></i>
-                    BLO Details
+                    Personnel Details
                   </h6>
                   <div className="row g-3">
                     <div className="col-md-6">
-                      <label className="form-label extra-small fw-bold text-muted">BLO Name</label>
+                      <label className="form-label extra-small fw-bold text-muted">Full Name</label>
                       <input disabled={isLocked} type="text" className="form-control form-control-sm" value={editForm.BLO_Name} onChange={e => setEditForm({...editForm, BLO_Name: e.target.value})} />
                     </div>
                     <div className="col-md-3">
                       <label className="form-label extra-small fw-bold text-muted">Gender</label>
                       <select disabled={isLocked} className="form-select form-select-sm" value={editForm.Gender} onChange={e => setEditForm({...editForm, Gender: e.target.value as any})}>
-                        <option>Male</option>
-                        <option>Female</option>
-                        <option>Other</option>
+                        <option>Male</option><option>Female</option><option>Other</option>
                       </select>
                     </div>
                     <div className="col-md-3">
                       <label className="form-label extra-small fw-bold text-muted">Mobile</label>
                       <input disabled={isLocked} type="text" className="form-control form-control-sm" value={editForm.Mobile} onChange={e => setEditForm({...editForm, Mobile: e.target.value})} />
                     </div>
-                    
+
                     <div className="col-md-4">
                       <label className="form-label extra-small fw-bold text-muted">Department</label>
                       <select 
@@ -362,7 +338,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
 
                     <div className="col-md-4">
                       <label className="form-label extra-small fw-bold text-muted">EPIC (Voter ID)</label>
-                      <input disabled={isLocked} type="text" className="form-control form-control-sm" value={editForm.EPIC} onChange={e => setEditForm({...editForm, EPIC: e.target.value})} />
+                      <input disabled={isLocked} type="text" className="form-control form-control-sm" value={editForm.EPIC || ''} onChange={e => setEditForm({...editForm, EPIC: e.target.value})} />
                     </div>
                   </div>
                 </div>
@@ -373,121 +349,41 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                 <div className="card-body p-4 bg-white border-start border-primary border-5 rounded-end">
                   <h6 className="text-primary fw-bold text-uppercase small mb-4 d-flex align-items-center">
                     <i className="bi bi-credit-card-2-front me-2"></i>
-                    Account Details <span className="text-danger ms-2 fw-normal" style={{ fontSize: '0.6rem' }}>(All Fields Required)</span>
+                    Account Data
                   </h6>
                   <div className="row g-4">
                     <div className="col-md-6">
                       <div className="p-3 border rounded-3 bg-light">
                         <label className="form-label fw-bold text-dark mb-2">IFSC Code <span className="text-danger">*</span></label>
                         <div className="input-group input-group-lg shadow-sm">
-                          <input 
-                            disabled={isLocked} 
-                            type="text" 
-                            className="form-control fw-bold text-primary text-uppercase" 
-                            placeholder="Enter 11-digit IFSC" 
-                            maxLength={11}
-                            value={editForm.IFSC_Code} 
-                            onChange={e => setEditForm({...editForm, IFSC_Code: e.target.value.toUpperCase().trim()})} 
-                            required
-                          />
-                          <button 
-                            type="button" 
-                            className="btn btn-primary px-4" 
-                            onClick={() => triggerIFSCSearch(editForm.IFSC_Code)}
-                            disabled={isSearching || isLocked}
-                          >
-                            {isSearching ? <i className="bi bi-arrow-repeat spin"></i> : <><i className="bi bi-search me-2"></i>Search</>}
-                          </button>
+                          <input disabled={isLocked} type="text" className="form-control fw-bold text-primary text-uppercase" placeholder="Enter IFSC" maxLength={11} value={editForm.IFSC_Code} onChange={e => setEditForm({...editForm, IFSC_Code: e.target.value.toUpperCase().trim()})} required />
+                          <button type="button" className="btn btn-primary" onClick={() => triggerIFSCSearch(editForm.IFSC_Code)} disabled={isSearching || isLocked}>{isSearching ? <i className="bi bi-arrow-repeat spin"></i> : 'Search'}</button>
                         </div>
-                        
-                        {searchFeedback.type !== 'none' && (
-                          <div className={`mt-2 small fw-bold text-${searchFeedback.type === 'error' ? 'danger' : searchFeedback.type === 'info' ? 'primary' : 'success'}`}>
-                            {searchFeedback.message}
-                          </div>
-                        )}
-
+                        {searchFeedback.type !== 'none' && <div className={`mt-2 small fw-bold text-${searchFeedback.type === 'error' ? 'danger' : 'success'}`}>{searchFeedback.message}</div>}
                         <div className="mt-3 p-3 rounded bg-white border border-info-subtle shadow-sm">
-                          <div className="small text-muted text-uppercase fw-bold mb-2" style={{fontSize: '0.65rem'}}>System Verification:</div>
-                          
-                          {(currentBank || currentBranch) ? (
-                            <>
-                              <div className="fw-bold text-dark d-flex align-items-center">
-                                {currentBank?.Bank_Name || '---'}
-                                {(stagedBank || stagedBranch) && <span className="ms-2 badge bg-info extra-small text-uppercase" style={{fontSize: '0.55rem'}}>New Discovery</span>}
-                              </div>
-                              <div className="small text-secondary">{currentBranch?.Branch_Name || '---'}</div>
-                            </>
-                          ) : (
-                            <div className="text-muted italic small">No record found. Type valid IFSC and click Search.</div>
-                          )}
+                          <div className="fw-bold text-dark">{currentBank?.Bank_Name || '---'}</div>
+                          <div className="small text-secondary">{currentBranch?.Branch_Name || '---'}</div>
                         </div>
                       </div>
                     </div>
                     <div className="col-md-6">
                       <div className="p-3 border rounded-3 bg-light">
                         <label className="form-label fw-bold text-dark mb-2">Account Number <span className="text-danger">*</span></label>
-                        <input 
-                          disabled={isLocked} 
-                          type="text" 
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          className="form-control form-control-lg shadow-sm fw-bold text-dark" 
-                          placeholder="Enter Full Account Number"
-                          value={String(editForm.Account_Number || '')} 
-                          onChange={e => {
-                            const val = e.target.value.replace(/\D/g, '');
-                            setEditForm({...editForm, Account_Number: val});
-                          }} 
-                          required
-                        />
-                        <div className="form-text mt-2"><i className="bi bi-info-circle me-1"></i> Digits only. Leading zeros are preserved.</div>
+                        <input disabled={isLocked} type="text" className="form-control form-control-lg shadow-sm fw-bold text-dark" value={String(editForm.Account_Number || '')} onChange={e => setEditForm({...editForm, Account_Number: e.target.value.replace(/\D/g, '')})} required />
                       </div>
                     </div>
                     <div className="col-12">
-                      <label className="form-label small fw-bold text-secondary">Account Passbook Doc (Upload PDF/JPG) <span className="text-danger">*</span></label>
+                      <label className="form-label small fw-bold text-secondary">Passbook Document Proof <span className="text-danger">*</span></label>
                       <input disabled={isLocked} type="file" className="form-control bg-white shadow-sm mb-3" onChange={handleFileChange} accept=".pdf,image/*" required={!editForm.Account_Passbook_Doc} />
-                      
-                      {editForm.Account_Passbook_Doc && (
-                        <div className="mt-2">
-                          <div className="p-3 border rounded bg-white shadow-sm mb-3">
-                            <h6 className="fw-bold extra-small text-muted text-uppercase mb-3 d-flex align-items-center">
-                              <i className="bi bi-eye me-2"></i>
-                              Document Preview
-                              {isFileNew ? <span className="ms-auto badge bg-info">Live Preview</span> : <span className="ms-auto badge bg-success">Existing Cloud File</span>}
-                            </h6>
-                            <div className="bg-light rounded overflow-hidden d-flex align-items-center justify-content-center" style={{ minHeight: '300px', maxHeight: '500px' }}>
-                              {renderPreview(editForm.Account_Passbook_Doc)}
-                            </div>
-                          </div>
-                          
-                          <div className="d-flex align-items-center gap-2">
-                            {isFileNew ? (
-                              <div className="alert alert-info py-2 px-3 small border-0 d-flex align-items-center mb-0 w-100 shadow-sm">
-                                <i className="bi bi-cloud-arrow-up-fill fs-5 me-2"></i>
-                                <span>New document selected. The old file on Drive will be replaced upon saving.</span>
-                              </div>
-                            ) : (
-                              <div className="d-flex align-items-center gap-2 w-100">
-                                <span className="badge bg-success px-3 py-2 shadow-sm"><i className="bi bi-check2-circle me-1"></i> Cloud Link Active</span>
-                                <span className="small text-muted ms-auto">Using file previously uploaded to Drive.</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      {!editForm.Account_Passbook_Doc && (
-                        <div className="text-danger extra-small mt-1"><i className="bi bi-exclamation-triangle me-1"></i> Passbook document is mandatory for registration.</div>
-                      )}
+                      {editForm.Account_Passbook_Doc && <div className="p-3 border rounded bg-white shadow-sm">{renderPreview(editForm.Account_Passbook_Doc)}</div>}
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-5 pt-4 border-top d-flex gap-3 justify-content-end align-items-center">
+              <div className="mt-5 pt-4 border-top d-flex gap-3 justify-content-end">
                 <button type="button" onClick={() => setSelectedBLO(null)} className="btn btn-outline-secondary px-4">Cancel</button>
-                <button type="submit" disabled={isLocked} className="btn btn-primary btn-lg px-5 shadow-sm fw-bold">
-                  Save & Push to Cloud
-                </button>
+                <button type="submit" disabled={isLocked} className="btn btn-primary btn-lg px-5 shadow-sm fw-bold">Update Account</button>
               </div>
             </form>
           </div>
@@ -498,23 +394,17 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
 
   return (
     <div className="container-fluid py-2">
-      <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+      <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
-          <h3 className="fw-bold mb-1">BLO Bank Directory</h3>
-          <p className="text-muted small mb-0">Update and manage bank account details for election personnel.</p>
+          <h3 className="fw-bold mb-1">{typeLabels[type]} Bank Directory</h3>
+          <p className="text-muted small mb-0">Update cloud records for {typeLabels[type]} personnel.</p>
         </div>
-        <div className="d-flex align-items-center gap-2">
-          <span className="badge bg-primary px-3 py-2">{filteredAccounts.length} Total Records</span>
-        </div>
+        <span className="badge bg-primary px-3 py-2">{filteredAccounts.length} Total</span>
       </div>
 
-      {/* Directory Filter Bar - Same as Verification module */}
       {isAdmin && (
         <div className="card border-0 shadow-sm bg-white p-3 mb-4">
           <div className="row g-3 align-items-center">
-            <div className="col-auto">
-              <span className="extra-small fw-bold text-muted text-uppercase"><i className="bi bi-funnel-fill me-1"></i> Quick Filters:</span>
-            </div>
             <div className="col-md-3">
               <select className="form-select form-select-sm" value={filterTehsil} onChange={e => setFilterTehsil(e.target.value)}>
                 <option value="">All Tehsils</option>
@@ -527,11 +417,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                 {uniqueACs.map(ac => <option key={ac} value={ac}>{ac}</option>)}
               </select>
             </div>
-            <div className="col-auto ms-auto">
-              <button className="btn btn-link btn-sm text-decoration-none extra-small fw-bold p-0" onClick={() => { setFilterTehsil(''); setFilterAC(''); }}>
-                <i className="bi bi-x-circle me-1"></i> Reset Filters
-              </button>
-            </div>
+            <div className="col-auto ms-auto"><button className="btn btn-link btn-sm extra-small fw-bold" onClick={() => { setFilterTehsil(''); setFilterAC(''); }}>Reset</button></div>
           </div>
         </div>
       )}
@@ -541,10 +427,10 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
           <table className="table table-hover align-middle mb-0">
             <thead className="table-dark">
               <tr>
-                <th className="py-3 px-4 fw-bold small">PART / AC</th>
-                <th className="py-3 px-4 fw-bold small">BLO NAME / DEPT</th>
-                <th className="py-3 px-4 fw-bold small bg-primary-subtle text-primary">ACCOUNT NUMBER</th>
-                <th className="py-3 px-4 fw-bold small bg-primary-subtle text-primary">IFSC CODE</th>
+                <th className="py-3 px-4 fw-bold small">{type === 'supervisor' ? 'SECTOR' : 'PART'} / AC</th>
+                <th className="py-3 px-4 fw-bold small">OFFICER NAME</th>
+                <th className="py-3 px-4 fw-bold small bg-primary-subtle text-primary">ACCOUNT NO</th>
+                <th className="py-3 px-4 fw-bold small bg-primary-subtle text-primary">IFSC</th>
                 <th className="py-3 px-4 fw-bold small text-center">STATUS</th>
                 <th className="py-3 px-4 fw-bold small text-end">ACTIONS</th>
               </tr>
@@ -553,64 +439,25 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
               {filteredAccounts.map(blo => (
                 <tr key={blo.BLO_ID} className={blo.Verified === 'yes' ? 'table-success-subtle' : ''}>
                   <td className="px-4 py-3">
-                    <div className="fw-bold text-dark">P-{blo.Part_No}</div>
+                    <div className="fw-bold">{type === 'supervisor' ? `S-${blo.Sector_No || 'NA'}` : `P-${blo.Part_No}`}</div>
                     <div className="extra-small text-muted">{blo.AC_Name}</div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="fw-semibold text-primary">{blo.BLO_Name}</div>
-                    <div className="extra-small fw-bold text-uppercase text-muted">
-                      {getDesgName(blo.Desg_ID)} | {getDeptName(blo.Dept_ID)}
-                    </div>
+                    <div className="extra-small text-muted">{getDesgName(blo.Desg_ID)}</div>
                   </td>
-                  <td className="px-4 py-3 bg-light font-monospace">
-                    {blo.Account_Number ? (
-                      <span className="fw-bold text-dark">{blo.Account_Number}</span>
-                    ) : (
-                      <span className="text-danger small italic"><i className="bi bi-x-circle me-1"></i> Pending</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 bg-light font-monospace">
-                    {blo.IFSC_Code ? (
-                      <span className="fw-bold text-primary">{blo.IFSC_Code}</span>
-                    ) : (
-                      <span className="text-danger small italic">---</span>
-                    )}
-                  </td>
+                  <td className="px-4 py-3 bg-light font-monospace">{blo.Account_Number || 'Pending'}</td>
+                  <td className="px-4 py-3 bg-light font-monospace">{blo.IFSC_Code || '---'}</td>
                   <td className="px-4 py-3 text-center">
-                    <div className="d-flex flex-column align-items-center">
-                      {blo.Verified === 'yes' ? (
-                        <span className="badge bg-success-subtle text-success rounded-pill px-3">
-                          <i className="bi bi-shield-check me-1"></i> Verified
-                        </span>
-                      ) : (
-                        <span className="badge bg-warning-subtle text-warning-emphasis rounded-pill px-3">
-                          Pending
-                        </span>
-                      )}
-                      {blo.Account_Passbook_Doc && blo.Account_Passbook_Doc.startsWith('http') && (
-                        <i className="bi bi-cloud-check text-success extra-small mt-1" title="Document Available"></i>
-                      )}
-                    </div>
+                    <span className={`badge ${blo.Verified === 'yes' ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning'} rounded-pill px-3`}>
+                      {blo.Verified === 'yes' ? 'Verified' : 'Pending'}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-end">
-                    <button 
-                      onClick={() => handleEdit(blo)} 
-                      className={`btn btn-sm px-3 ${blo.Verified === 'yes' && user.User_Type !== UserType.ADMIN ? 'btn-outline-secondary' : 'btn-primary shadow-sm'}`}
-                    >
-                      <i className={`bi ${blo.Verified === 'yes' && user.User_Type !== UserType.ADMIN ? 'bi-eye' : 'bi-pencil'} me-1`}></i> 
-                      {blo.Verified === 'yes' && user.User_Type !== UserType.ADMIN ? 'View' : 'Edit'}
-                    </button>
+                    <button onClick={() => handleEdit(blo)} className="btn btn-sm btn-primary">Edit</button>
                   </td>
                 </tr>
               ))}
-              {filteredAccounts.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="text-center py-5 text-muted italic">
-                    <i className="bi bi-search mb-2 fs-2 d-block opacity-25"></i>
-                    No accounts found matching your current filters.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>

@@ -3,6 +3,8 @@ export enum UserType {
   TEHSIL = 'tehsil'
 }
 
+export type AccountCategory = 'blo' | 'avihit' | 'supervisor';
+
 export interface User {
   User_ID: string;
   User_Name: string;
@@ -39,7 +41,7 @@ export interface Department {
 export interface Designation {
   Desg_ID: string;
   Desg_Name: string;
-  Dept_ID: string; // Required for cascading dropdown from Department
+  Dept_ID: string;
 }
 
 export interface BLOAccount {
@@ -48,9 +50,10 @@ export interface BLOAccount {
   AC_No: string;
   AC_Name: string;
   Tehsil: string;
-  Part_No: string;
-  Part_Name_EN: string;
-  Part_Name_HI: string;
+  Part_No?: string;
+  Part_Name_EN?: string;
+  Part_Name_HI?: string;
+  Sector_No?: string; // Specific to Supervisor accounts
   BLO_Name: string;
   Gender: 'Male' | 'Female' | 'Other';
   Desg_ID: string;
@@ -70,6 +73,8 @@ export interface BLOAccount {
 export interface AppState {
   currentUser: User | null;
   accounts: BLOAccount[];
+  avihitAccounts: BLOAccount[];
+  supervisorAccounts: BLOAccount[];
   banks: Bank[];
   branches: BankBranch[];
   users: User[];

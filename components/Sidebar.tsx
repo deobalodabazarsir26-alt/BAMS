@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { User, UserType } from '../types';
 
 interface SidebarProps {
@@ -11,15 +11,44 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ user, onNavigate, currentPage, isOpen, setIsOpen, onLogout }) => {
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'bi-grid-1x2-fill', roles: [UserType.ADMIN, UserType.TEHSIL] },
-    { id: 'entry', label: 'Account Entry', icon: 'bi-pencil-square', roles: [UserType.ADMIN, UserType.TEHSIL] },
-    { id: 'verification', label: 'Verification', icon: 'bi-patch-check-fill', roles: [UserType.ADMIN, UserType.TEHSIL] },
-    { id: 'users', label: 'User Management', icon: 'bi-people-fill', roles: [UserType.ADMIN, UserType.TEHSIL] },
-    { id: 'reports', label: 'Reports', icon: 'bi-bar-chart-line-fill', roles: [UserType.ADMIN, UserType.TEHSIL] },
-  ];
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({
+    'entry': true,
+    'verification': false,
+    'reports': false
+  });
 
-  const filteredMenu = menuItems.filter(item => item.roles.includes(user.User_Type));
+  const toggleMenu = (menuId: string) => {
+    setOpenMenus(prev => ({ ...prev, [menuId]: !prev[menuId] }));
+  };
+
+  const menuSections = [
+    { id: 'dashboard', label: 'Dashboard', icon: 'bi-grid-1x2-fill', type: 'single' },
+    { 
+      id: 'entry', label: 'Account Entry', icon: 'bi-pencil-square', type: 'dropdown',
+      items: [
+        { id: 'entry-blo', label: 'BLO Accounts' },
+        { id: 'entry-avihit', label: 'Avihit Accounts' },
+        { id: 'entry-supervisor', label: 'Supervisor Accounts' }
+      ]
+    },
+    { 
+      id: 'verification', label: 'Verification', icon: 'bi-patch-check-fill', type: 'dropdown',
+      items: [
+        { id: 'verification-blo', label: 'BLO Verification' },
+        { id: 'verification-avihit', label: 'Avihit Verification' },
+        { id: 'verification-supervisor', label: 'Supervisor Verification' }
+      ]
+    },
+    { 
+      id: 'reports', label: 'Reports', icon: 'bi-bar-chart-line-fill', type: 'dropdown',
+      items: [
+        { id: 'reports-blo', label: 'BLO Report' },
+        { id: 'reports-avihit', label: 'Avihit Report' },
+        { id: 'reports-supervisor', label: 'Supervisor Report' }
+      ]
+    },
+    { id: 'users', label: 'User Management', icon: 'bi-people-fill', type: 'single' },
+  ];
 
   return (
     <>
@@ -46,15 +75,43 @@ const Sidebar: React.FC<SidebarProps> = ({ user, onNavigate, currentPage, isOpen
         </div>
 
         <ul className="nav nav-pills flex-column mb-auto">
-          {filteredMenu.map((item) => (
-            <li className="nav-item" key={item.id}>
-              <button
-                onClick={() => { onNavigate(item.id); setIsOpen(false); }}
-                className={`nav-link w-100 text-start border-0 ${currentPage === item.id ? 'active' : ''}`}
-              >
-                <i className={`bi ${item.icon} me-3`}></i>
-                {item.label}
-              </button>
+          {menuSections.map((section) => (
+            <li className="nav-item" key={section.id}>
+              {section.type === 'single' ? (
+                <button
+                  onClick={() => { onNavigate(section.id); setIsOpen(false); }}
+                  className={`nav-link w-100 text-start border-0 ${currentPage === section.id ? 'active' : ''}`}
+                >
+                  <i className={`bi ${section.icon} me-3`}></i>
+                  {section.label}
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => toggleMenu(section.id)}
+                    className="nav-link w-100 text-start border-0 d-flex justify-content-between align-items-center"
+                    style={{ background: 'transparent' }}
+                  >
+                    <span>
+                      <i className={`bi ${section.icon} me-3`}></i>
+                      {section.label}
+                    </span>
+                    <i className={`bi bi-chevron-${openMenus[section.id] ? 'up' : 'down'} extra-small`}></i>
+                  </button>
+                  <div className={`ps-4 overflow-hidden transition-all ${openMenus[section.id] ? 'd-block' : 'd-none'}`} style={{ marginTop: '-0.5rem' }}>
+                    {section.items?.map(subItem => (
+                      <button
+                        key={subItem.id}
+                        onClick={() => { onNavigate(subItem.id); setIsOpen(false); }}
+                        className={`nav-link w-100 text-start border-0 extra-small py-2 ${currentPage === subItem.id ? 'active text-white' : 'text-white-50'}`}
+                        style={{ fontSize: '0.75rem' }}
+                      >
+                        {subItem.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </li>
           ))}
         </ul>
@@ -63,7 +120,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, onNavigate, currentPage, isOpen
         
         <button 
           onClick={onLogout}
-          className="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center py-2"
+          className="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center py-2 btn-sm"
         >
           <i className="bi bi-box-arrow-right me-2"></i>
           Logout

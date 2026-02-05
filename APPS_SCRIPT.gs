@@ -5,9 +5,6 @@
 const SPREADSHEET_ID = '199EWhTKl3E1MxSSL2-xFFIHrvhKJnADLCtLyWI4pSMc';
 const TARGET_FOLDER_ID = '1kOZQqX8bBNLswS-ogfmmL0-dnvPjODPv';
 
-/**
- * Normalizes headers: "Officer Name" -> "Officer_Name"
- */
 function normalizeHeader(header) {
   return String(header).trim().replace(/[^a-zA-Z0-9]/g, '_');
 }
@@ -21,6 +18,8 @@ function doGet(e) {
     const data = {
       users: getSheetData('User'),
       accounts: getSheetData('BLO_Account'),
+      avihitAccounts: getSheetData('Avihit_Account'),
+      supervisorAccounts: getSheetData('Supervisor_Account'),
       banks: getSheetData('Bank'),
       branches: getSheetData('Bank_Branch'),
       departments: getSheetData('Department'),
@@ -41,16 +40,25 @@ function doPost(e) {
     
     let result = { success: false };
     
+    // Mapping actions to sheets
     if (action === 'updateAccount') {
       result = updateRecord('BLO_Account', 'BLO_ID', payload.BLO_ID, payload);
+    } else if (action === 'updateAvihitAccount') {
+      result = updateRecord('Avihit_Account', 'BLO_ID', payload.BLO_ID, payload);
+    } else if (action === 'updateSupervisorAccount') {
+      result = updateRecord('Supervisor_Account', 'BLO_ID', payload.BLO_ID, payload);
+    } else if (action === 'verifyAccount') {
+      result = updateRecord('BLO_Account', 'BLO_ID', payload.BLO_ID, { Verified: payload.Verified });
+    } else if (action === 'verifyAvihitAccount') {
+      result = updateRecord('Avihit_Account', 'BLO_ID', payload.BLO_ID, { Verified: payload.Verified });
+    } else if (action === 'verifySupervisorAccount') {
+      result = updateRecord('Supervisor_Account', 'BLO_ID', payload.BLO_ID, { Verified: payload.Verified });
     } else if (action === 'updateUser') {
       result = updateRecord('User', 'User_ID', payload.User_ID, payload);
     } else if (action === 'addBank') {
       result = addRecord('Bank', payload);
     } else if (action === 'addBranch') {
       result = addRecord('Bank_Branch', payload);
-    } else if (action === 'verifyAccount') {
-      result = updateRecord('BLO_Account', 'BLO_ID', payload.BLO_ID, { Verified: payload.Verified });
     }
     
     return createSafeResponse(result);
@@ -59,29 +67,10 @@ function doPost(e) {
   }
 }
 
-/**
- * Creates a safe response to bypass Content-Length browser bugs
- */
 function createSafeResponse(data) {
   const json = JSON.stringify(data);
   return ContentService.createTextOutput(json)
-    .setMimeType(ContentService.MimeType.TEXT); // Using TEXT helps avoid browser body mismatch errors with GAS
-}
-
-function checkConfig() {
-  const reports = {
-    spreadsheet: { status: 'Checking...', id: SPREADSHEET_ID },
-    folder: { status: 'Checking...', id: TARGET_FOLDER_ID },
-    success: true
-  };
-  try {
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    reports.spreadsheet.status = 'OK - Access granted. Name: ' + ss.getName();
-  } catch (e) {
-    reports.spreadsheet.status = 'ERROR: ' + e.toString();
-    reports.success = false;
-  }
-  return reports;
+    .setMimeType(ContentService.MimeType.TEXT);
 }
 
 function getSheetData(sheetName) {
@@ -93,7 +82,6 @@ function getSheetData(sheetName) {
     const values = sheet.getDataRange().getValues();
     if (values.length <= 1) return [];
     
-    // Normalize headers to match React state keys (e.g., "Officer_Name")
     const headers = values[0].map(h => normalizeHeader(h));
     const data = [];
     
@@ -115,7 +103,7 @@ function updateRecord(sheetName, idColumnName, idValue, updateObj) {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheet = ss.getSheetByName(sheetName);
-    if (!sheet) return { success: false, message: 'Sheet not found' };
+    if (!sheet) return { success: false, message: 'Sheet not found: ' + sheetName };
 
     const data = sheet.getDataRange().getValues();
     const rawHeaders = data[0];
@@ -128,23 +116,21 @@ function updateRecord(sheetName, idColumnName, idValue, updateObj) {
       if (String(data[i][idColIndex]) === String(idValue)) {
         updateObj['T_STMP_UPD'] = new Date().toISOString();
         
-        // Literal string for Account Numbers
         if (updateObj['Account_Number']) {
            let acVal = String(updateObj['Account_Number']);
            if (!acVal.startsWith("'")) updateObj['Account_Number'] = "'" + acVal;
         }
 
-        // Handle File Logic only if column exists
         if (updateObj['Account_Passbook_Doc'] && updateObj['Account_Passbook_Doc'].startsWith('data:')) {
           const docIdx = normalizedHeaders.indexOf('Account_Passbook_Doc');
           if (docIdx !== -1) {
-            const fileName = (updateObj['AC_No'] || 'NA') + "_" + (updateObj['Part_No'] || 'NA');
+            const prefix = updateObj['Sector_No'] ? ("S_" + updateObj['Sector_No']) : (updateObj['AC_No'] + "_" + updateObj['Part_No']);
+            const fileName = prefix + "_" + updateObj['BLO_Name'];
             const driveUrl = uploadBase64ToDrive(updateObj['Account_Passbook_Doc'], fileName);
             if (driveUrl) updateObj['Account_Passbook_Doc'] = driveUrl;
           }
         }
         
-        // Map normalized keys back to original column indices
         for (let key in updateObj) {
           const colIndex = normalizedHeaders.indexOf(normalizeHeader(key));
           if (colIndex !== -1) {
@@ -154,7 +140,7 @@ function updateRecord(sheetName, idColumnName, idValue, updateObj) {
         return { success: true };
       }
     }
-    return { success: false, message: 'ID ' + idValue + ' not found' };
+    return { success: false, message: 'ID ' + idValue + ' not found in ' + sheetName };
   } catch (e) {
     return { success: false, message: 'Update Error: ' + e.toString() };
   }
@@ -191,4 +177,20 @@ function addRecord(sheetName, recordObj) {
     sheet.appendRow(newRow);
     return { success: true };
   } catch (e) { return { success: false, error: e.toString() }; }
+}
+
+function checkConfig() {
+  const reports = {
+    spreadsheet: { status: 'Checking...', id: SPREADSHEET_ID },
+    folder: { status: 'Checking...', id: TARGET_FOLDER_ID },
+    success: true
+  };
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    reports.spreadsheet.status = 'OK - Access granted. Name: ' + ss.getName();
+  } catch (e) {
+    reports.spreadsheet.status = 'ERROR: ' + e.toString();
+    reports.success = false;
+  }
+  return reports;
 }
