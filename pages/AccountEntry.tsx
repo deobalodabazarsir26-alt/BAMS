@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { BLOAccount, User, UserType, Bank, BankBranch, Department, Designation, AccountCategory } from '../types';
-import { searchIFSCViaGemini } from '../services/geminiService';
+import { searchIFSC } from '../services/ifscService';
 
 interface AccountEntryProps {
   user: User;
@@ -104,7 +104,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
     }
 
     try {
-      const result = await searchIFSCViaGemini(ifscCode);
+      const result = await searchIFSC(ifscCode);
       if (result) {
         const normalizedBankName = result.bankName.trim().toLowerCase();
         let bank = banks.find(b => String(b.Bank_Name).toLowerCase() === normalizedBankName);
