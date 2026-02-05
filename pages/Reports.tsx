@@ -19,6 +19,9 @@ const Reports: React.FC<ReportsProps> = ({ user, accounts, users, type }) => {
   const globalTotal = displayedAccounts.length;
   const globalEntered = displayedAccounts.filter(a => a.Account_Number && String(a.Account_Number).trim() !== '').length;
   const globalVerified = displayedAccounts.filter(a => a.Verified === 'yes').length;
+  
+  const globalEntryPct = globalTotal > 0 ? Math.round((globalEntered / globalTotal) * 100) : 0;
+  const globalVerifyPct = globalTotal > 0 ? Math.round((globalVerified / globalTotal) * 100) : 0;
 
   const userBreakdown = isAdmin ? users.map(u => {
     const userAccounts = accounts.filter(a => String(a.User_ID).trim() === String(u.User_ID).trim());
@@ -47,41 +50,79 @@ const Reports: React.FC<ReportsProps> = ({ user, accounts, users, type }) => {
       <div className="row g-4 mb-4">
         <div className="col-md-4">
           <div className="card border-0 shadow-sm bg-primary text-white p-4">
-            <small className="opacity-75">TOTAL PARTS</small><h2 className="fw-bold">{globalTotal}</h2>
+            <div className="d-flex justify-content-between align-items-center">
+              <div>
+                <small className="opacity-75">TOTAL PARTS</small>
+                <h2 className="fw-bold mb-0">{globalTotal}</h2>
+              </div>
+              <i className="bi bi-people-fill fs-1 opacity-25"></i>
+            </div>
           </div>
         </div>
         <div className="col-md-4">
           <div className="card border-0 shadow-sm bg-info text-white p-4">
-            <small className="opacity-75">ENTRIES DONE</small><h2 className="fw-bold">{globalEntered}</h2>
+            <div className="d-flex justify-content-between align-items-center">
+              <div>
+                <small className="opacity-75">ENTRIES DONE</small>
+                <h2 className="fw-bold mb-0">{globalEntered} <small className="fs-6 opacity-75">({globalEntryPct}%)</small></h2>
+              </div>
+              <i className="bi bi-pencil-fill fs-1 opacity-25"></i>
+            </div>
           </div>
         </div>
         <div className="col-md-4">
           <div className="card border-0 shadow-sm bg-success text-white p-4">
-            <small className="opacity-75">VERIFIED</small><h2 className="fw-bold">{globalVerified}</h2>
+            <div className="d-flex justify-content-between align-items-center">
+              <div>
+                <small className="opacity-75">VERIFIED</small>
+                <h2 className="fw-bold mb-0">{globalVerified} <small className="fs-6 opacity-75">({globalVerifyPct}%)</small></h2>
+              </div>
+              <i className="bi bi-patch-check-fill fs-1 opacity-25"></i>
+            </div>
           </div>
         </div>
       </div>
 
       {isAdmin && (
-        <div className="card border-0 shadow-sm">
+        <div className="card border-0 shadow-sm overflow-hidden">
           <div className="table-responsive">
             <table className="table table-hover align-middle mb-0">
               <thead className="table-light">
-                <tr><th className="ps-4">TEHSIL</th><th>OFFICER</th><th className="text-center">COUNT</th><th>ENTRY %</th><th>VERIFY %</th></tr>
+                <tr>
+                  <th className="ps-4 py-3">TEHSIL</th>
+                  <th className="py-3">OFFICER</th>
+                  <th className="py-3 text-center">TOTAL</th>
+                  <th className="py-3">ENTRY STATUS (COUNT)</th>
+                  <th className="py-3">VERIFY STATUS (COUNT)</th>
+                </tr>
               </thead>
               <tbody>
                 {userBreakdown.map(item => (
                   <tr key={item.userId}>
-                    <td className="ps-4"><span className="badge bg-light text-dark border">{item.tehsil}</span></td>
-                    <td><div className="fw-bold">{item.officerName}</div></td>
-                    <td className="text-center">{item.total}</td>
-                    <td>
-                      <div className="progress mb-1" style={{ height: '4px' }}><div className="progress-bar bg-info" style={{ width: `${item.entryProgress}%` }}></div></div>
-                      <small className="extra-small">{item.entryProgress}%</small>
+                    <td className="ps-4">
+                      <span className="badge bg-light text-dark border px-2 py-1">{item.tehsil}</span>
                     </td>
                     <td>
-                      <div className="progress mb-1" style={{ height: '4px' }}><div className="progress-bar bg-success" style={{ width: `${item.verifyProgress}%` }}></div></div>
-                      <small className="extra-small">{item.verifyProgress}%</small>
+                      <div className="fw-bold text-primary">{item.officerName}</div>
+                    </td>
+                    <td className="text-center fw-bold">{item.total}</td>
+                    <td>
+                      <div className="progress mb-1" style={{ height: '6px' }}>
+                        <div className="progress-bar bg-info" style={{ width: `${item.entryProgress}%` }}></div>
+                      </div>
+                      <div className="d-flex justify-content-between align-items-center">
+                        <small className="fw-bold text-info">{item.entryProgress}%</small>
+                        <small className="extra-small text-muted">{item.entered} / {item.total}</small>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="progress mb-1" style={{ height: '6px' }}>
+                        <div className="progress-bar bg-success" style={{ width: `${item.verifyProgress}%` }}></div>
+                      </div>
+                      <div className="d-flex justify-content-between align-items-center">
+                        <small className="fw-bold text-success">{item.verifyProgress}%</small>
+                        <small className="extra-small text-muted">{item.verified} / {item.total}</small>
+                      </div>
                     </td>
                   </tr>
                 ))}
