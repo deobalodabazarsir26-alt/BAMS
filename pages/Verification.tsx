@@ -93,6 +93,66 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
     XLSX.writeFile(wb, `${typeLabels[type]}_Verified.xlsx`);
   };
 
+  const handleExportPDF = () => {
+    const data = getExportData();
+    if (data.length === 0) {
+      alert("No verified accounts to export.");
+      return;
+    }
+
+    const doc = new jsPDF();
+    const tableColumn = Object.keys(data[0]);
+    const tableRows = data.map(item => Object.values(item));
+
+    const title = `${typeLabels[type]} Verified Bank Accounts Report`;
+    const dateStr = `Generated on: ${new Date().toLocaleDateString()}`;
+
+    doc.setFontSize(18);
+    doc.text(title, 14, 15);
+    doc.setFontSize(11);
+    doc.text(dateStr, 14, 22);
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 28,
+      theme: 'grid',
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold' },
+      margin: { bottom: 45 }, // Space for footer
+      didDrawPage: (dataArg) => {
+        const pageSize = doc.internal.pageSize;
+        const pageHeight = pageSize.height ? pageSize.height : pageSize.getHeight();
+        const pageWidth = pageSize.width ? pageSize.width : pageSize.getWidth();
+        
+        // Footer signature block
+        const footerY = pageHeight - 35;
+        doc.setDrawColor(200);
+        doc.line(14, footerY, pageWidth - 14, footerY);
+        
+        doc.setFontSize(10);
+        doc.setTextColor(0);
+        doc.setFont("helvetica", "bold");
+        doc.text(`Verifying Authority:`, 14, footerY + 10);
+        
+        doc.setFont("helvetica", "normal");
+        doc.text(`${user.Officer_Name}`, 14, footerY + 18);
+        doc.text(`${user.Designation}`, 14, footerY + 24);
+        
+        doc.setFontSize(9);
+        doc.text(`Signature: __________________________`, 14, footerY + 30);
+        
+        // Page numbering
+        const str = `Page ${dataArg.pageNumber}`;
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text(str, pageWidth - 25, footerY + 10);
+      }
+    });
+
+    doc.save(`${typeLabels[type]}_Verified_Accounts.pdf`);
+  };
+
   const renderDocumentViewer = (doc: string) => {
     if (!doc) return <div className="text-center text-muted p-5">No Document</div>;
     if (doc.includes('drive.google.com')) {
@@ -118,7 +178,14 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
                 </div>
               </div>
             )}
-            <button onClick={handleExportExcel} className="btn btn-success btn-sm w-100">Export Verified</button>
+            <div className="d-flex gap-2">
+              <button onClick={handleExportExcel} className="btn btn-success btn-sm flex-grow-1">
+                <i className="bi bi-file-earmark-excel me-2"></i>Export Excel
+              </button>
+              <button onClick={handleExportPDF} className="btn btn-danger btn-sm flex-grow-1">
+                <i className="bi bi-file-earmark-pdf me-2"></i>Export PDF
+              </button>
+            </div>
           </div>
 
           <div className="card shadow-sm border-0 overflow-hidden bg-white">

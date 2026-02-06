@@ -12,6 +12,8 @@ interface BLOAppProps {
   onLogout: () => void;
 }
 
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+
 const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments, designations, onUpdateAccount, onLogout }) => {
   const [authStep, setAuthStep] = useState<'login' | 'change-pin' | 'dashboard' | 'edit'>('login');
   const [mobile, setMobile] = useState('');
@@ -160,6 +162,11 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editForm) {
+      if (file.size > MAX_FILE_SIZE) {
+        alert("Upload Failed: This file exceeds the 2 MB restriction. Please upload a smaller document.");
+        e.target.value = ''; // Clear input
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setEditForm({ ...editForm, Account_Passbook_Doc: reader.result as string });
@@ -324,7 +331,7 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
             </div>
 
             <div className="mb-4">
-              <label className="form-label small fw-bold">Passbook Copy</label>
+              <label className="form-label small fw-bold">Passbook Copy (Max 2MB)</label>
               <input type="file" className="form-control border-0 shadow-sm mb-2" accept="image/*,.pdf" onChange={handleFileChange} />
               {editForm?.Account_Passbook_Doc && (
                 <div className="rounded border bg-white p-2 text-center">

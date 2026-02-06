@@ -13,6 +13,8 @@ interface AccountEntryProps {
   type: AccountCategory;
 }
 
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+
 const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, branches, departments, designations, onUpdate, type }) => {
   const [selectedBLO, setSelectedBLO] = useState<BLOAccount | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -193,6 +195,11 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editForm) {
+      if (file.size > MAX_FILE_SIZE) {
+        alert("Upload Failed: This file exceeds the 2 MB restriction. Please upload a smaller document.");
+        e.target.value = ''; // Clear input
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setEditForm({ ...editForm, Account_Passbook_Doc: reader.result as string });
@@ -404,7 +411,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                       </div>
                     </div>
                     <div className="col-12">
-                      <label className="form-label small fw-bold text-secondary">Passbook Document Proof <span className="text-danger">*</span></label>
+                      <label className="form-label small fw-bold text-secondary">Passbook Document Proof (Max 2MB) <span className="text-danger">*</span></label>
                       <input disabled={isLocked} type="file" className="form-control bg-white shadow-sm mb-3" onChange={handleFileChange} accept=".pdf,image/*" required={!editForm.Account_Passbook_Doc} />
                       {editForm.Account_Passbook_Doc && <div className="p-3 border rounded bg-white shadow-sm">{renderPreview(editForm.Account_Passbook_Doc)}</div>}
                     </div>
