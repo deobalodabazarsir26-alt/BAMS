@@ -188,8 +188,19 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
 
   const handleSaveAccount = async () => {
     if (!editForm || !currentBLO) return;
-    if (!editForm.Account_Number || !editForm.IFSC_Code || !editForm.Account_Passbook_Doc) {
-      alert("All bank details are mandatory.");
+    
+    if (!editForm.IFSC_Code || editForm.IFSC_Code.length !== 11) {
+      alert("A valid 11-digit IFSC Code is mandatory.");
+      return;
+    }
+    
+    if (!editForm.Account_Number || editForm.Account_Number.length < 5) {
+      alert("A valid Account Number is mandatory.");
+      return;
+    }
+
+    if (!editForm.Account_Passbook_Doc) {
+      alert("A copy of the Bank Passbook is mandatory.");
       return;
     }
 
@@ -429,12 +440,12 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
             <h5 className="fw-bold mb-4">{isVerified ? 'View Record' : 'Edit Details'}</h5>
             
             <div className="mb-4">
-              <label className="form-label small fw-bold">Full Name</label>
+              <label className="form-label small fw-bold">Full Name <span className="text-danger">*</span></label>
               <input disabled={isVerified} type="text" className="form-control form-control-lg border-0 shadow-sm" value={editForm?.BLO_Name || ''} onChange={e => setEditForm(prev => prev ? ({ ...prev, BLO_Name: e.target.value }) : null)} required />
             </div>
 
             <div className="mb-4">
-              <label className="form-label small fw-bold">Gender</label>
+              <label className="form-label small fw-bold">Gender <span className="text-danger">*</span></label>
               <select disabled={isVerified} className="form-select form-select-lg border-0 shadow-sm" value={editForm?.Gender} onChange={e => setEditForm(prev => prev ? ({ ...prev, Gender: e.target.value as any }) : null)} required>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
@@ -443,9 +454,9 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
             </div>
 
             <div className="mb-4">
-              <label className="form-label small fw-bold">IFSC Code</label>
+              <label className="form-label small fw-bold">IFSC Code <span className="text-danger">*</span></label>
               <div className="input-group shadow-sm">
-                <input disabled={isVerified} type="text" className="form-control border-0 bg-white fw-bold text-uppercase" placeholder="Enter IFSC" maxLength={11} value={editForm?.IFSC_Code} onChange={e => setEditForm(prev => prev ? ({ ...prev, IFSC_Code: e.target.value.toUpperCase().trim() }) : null)} />
+                <input disabled={isVerified} type="text" className="form-control border-0 bg-white fw-bold text-uppercase" placeholder="Enter IFSC" maxLength={11} value={editForm?.IFSC_Code} onChange={e => setEditForm(prev => prev ? ({ ...prev, IFSC_Code: e.target.value.toUpperCase().trim() }) : null)} required />
                 <button onClick={handleIFSCSearch} className="btn btn-dark" disabled={isSearching || isVerified}>
                   FETCH
                 </button>
@@ -460,13 +471,13 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
             </div>
 
             <div className="mb-4">
-              <label className="form-label small fw-bold">Account Number</label>
-              <input disabled={isVerified} type="text" className="form-control form-control-lg border-0 shadow-sm" value={editForm?.Account_Number} onChange={e => setEditForm(prev => prev ? ({ ...prev, Account_Number: e.target.value.replace(/\D/g, '') }) : null)} placeholder="Enter Account Number" />
+              <label className="form-label small fw-bold">Account Number <span className="text-danger">*</span></label>
+              <input disabled={isVerified} type="text" className="form-control form-control-lg border-0 shadow-sm" value={editForm?.Account_Number} onChange={e => setEditForm(prev => prev ? ({ ...prev, Account_Number: e.target.value.replace(/\D/g, '') }) : null)} placeholder="Enter Account Number" required />
             </div>
 
             <div className="mb-4">
-              <label className="form-label small fw-bold">Passbook Copy (Max 4MB)</label>
-              {!isVerified && <input type="file" className="form-control border-0 shadow-sm mb-2" accept="image/*,.pdf" onChange={handleFileChange} />}
+              <label className="form-label small fw-bold">Passbook Copy (Max 4MB) <span className="text-danger">*</span></label>
+              {!isVerified && <input type="file" className="form-control border-0 shadow-sm mb-2" accept="image/*,.pdf" onChange={handleFileChange} required={!editForm?.Account_Passbook_Doc} />}
               {editForm?.Account_Passbook_Doc && (
                 <div className="rounded border bg-white p-2">
                   {renderDocumentPreview(editForm.Account_Passbook_Doc)}
