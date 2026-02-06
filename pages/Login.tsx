@@ -30,8 +30,8 @@ const Login: React.FC<LoginProps> = ({ users, onLogin, onEnterBLOApp }) => {
             <div className="bg-primary bg-opacity-10 d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-sm" style={{ width: '80px', height: '80px' }}>
               <i className="bi bi-shield-lock text-primary fs-1"></i>
             </div>
-            <h3 className="fw-bold text-dark">Portal Access</h3>
-            <p className="text-muted small">Election Official Management</p>
+            <h3 className="fw-bold text-dark">Account Portal Login</h3>
+            <p className="text-muted small">Official Account Management System</p>
           </div>
 
           <div className="mb-4">
