@@ -12,20 +12,24 @@ interface BLOAppProps {
   onLogout: () => void;
 }
 
-const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB
 
 const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments, designations, onUpdateAccount, onLogout }) => {
   const [authStep, setAuthStep] = useState<'login' | 'change-pin' | 'dashboard' | 'edit'>('login');
   const [mobile, setMobile] = useState('');
   const [pin, setPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
   const [currentBLO, setCurrentBLO] = useState<BLOAccount | null>(null);
   const [error, setError] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const [editForm, setEditForm] = useState<BLOAccount | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [stagedBank, setStagedBank] = useState<Bank | null>(null);
   const [stagedBranch, setStagedBranch] = useState<BankBranch | null>(null);
   const [feedback, setFeedback] = useState('');
+
+  const isVerified = currentBLO?.Verified === 'yes';
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +44,6 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
 
     const storedPin = (blo.Secret_PIN || '123456').trim();
     if (storedPin === pin.trim()) {
-      // Normalize Gender for state initialization
       const normalizedGender = (blo.Gender === 'Male' || blo.Gender === 'Female' || blo.Gender === 'Other') 
         ? blo.Gender 
         : 'Male';
@@ -72,11 +75,19 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
     }
 
     if (currentBLO) {
-      const updated = { ...currentBLO, Secret_PIN: pin, PIN_Changed: 'yes' as const };
-      await onUpdateAccount(updated, 'blo');
-      setCurrentBLO(updated);
-      setAuthStep('dashboard');
-      alert('PIN updated successfully. Welcome!');
+      setIsProcessing(true);
+      try {
+        const updated = { ...currentBLO, Secret_PIN: pin, PIN_Changed: 'yes' as const };
+        await onUpdateAccount(updated, 'blo');
+        setCurrentBLO(updated);
+        setEditForm(updated); 
+        setAuthStep('dashboard');
+        alert('PIN updated successfully. Welcome!');
+      } catch (err) {
+        setError('Failed to update PIN. Please try again.');
+      } finally {
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -163,8 +174,8 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
     const file = e.target.files?.[0];
     if (file && editForm) {
       if (file.size > MAX_FILE_SIZE) {
-        alert("Upload Failed: This file exceeds the 2 MB restriction. Please upload a smaller document.");
-        e.target.value = ''; // Clear input
+        alert("Upload Failed: This file exceeds the 4 MB restriction. Please upload a smaller document.");
+        e.target.value = '';
         return;
       }
       const reader = new FileReader();
@@ -176,15 +187,99 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
   };
 
   const handleSaveAccount = async () => {
-    if (!editForm) return;
+    if (!editForm || !currentBLO) return;
     if (!editForm.Account_Number || !editForm.IFSC_Code || !editForm.Account_Passbook_Doc) {
       alert("All bank details are mandatory.");
       return;
     }
-    await onUpdateAccount(editForm, 'blo', stagedBank || undefined, stagedBranch || undefined);
-    setAuthStep('dashboard');
-    alert('Bank account updated successfully!');
+
+    setIsProcessing(true);
+    try {
+      const finalPayload = { 
+        ...editForm, 
+        Secret_PIN: currentBLO.Secret_PIN, 
+        PIN_Changed: currentBLO.PIN_Changed 
+      };
+      
+      await onUpdateAccount(finalPayload, 'blo', stagedBank || undefined, stagedBranch || undefined);
+      
+      setCurrentBLO(finalPayload);
+      setEditForm(finalPayload);
+      
+      setAuthStep('dashboard');
+      alert('Bank account updated successfully!');
+    } catch (err) {
+      alert('Error saving record. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
+
+  const renderDocumentPreview = (doc: string) => {
+    if (!doc) return null;
+
+    // Handle Google Drive links
+    if (doc.includes('drive.google.com')) {
+      const previewUrl = doc.replace('/view?usp=sharing', '/preview').replace('/view', '/preview');
+      return (
+        <div className="ratio ratio-4x3 shadow-sm rounded overflow-hidden mb-2">
+          <iframe src={previewUrl} title="Passbook Preview" className="border-0"></iframe>
+        </div>
+      );
+    }
+
+    // Handle Base64 Data
+    if (doc.startsWith('data:image')) {
+      return (
+        <div className="text-center mb-2">
+          <img src={doc} className="img-fluid rounded shadow-sm border" alt="Passbook Preview" style={{ maxHeight: '200px' }} />
+        </div>
+      );
+    }
+
+    if (doc.startsWith('data:application/pdf')) {
+      return (
+        <div className="ratio ratio-4x3 shadow-sm rounded overflow-hidden mb-2">
+          <iframe src={doc} title="Passbook PDF Preview" className="border-0"></iframe>
+        </div>
+      );
+    }
+
+    // Handle regular URLs (that are not Drive)
+    if (doc.startsWith('http')) {
+      const isImage = /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(doc);
+      if (isImage) {
+        return (
+          <div className="text-center mb-2">
+            <img src={doc} className="img-fluid rounded shadow-sm border" alt="Passbook Preview" style={{ maxHeight: '200px' }} />
+          </div>
+        );
+      }
+      return (
+        <div className="p-3 border rounded bg-light text-center mb-2">
+          <i className="bi bi-file-earmark-text fs-1 text-primary"></i>
+          <div className="small text-muted mt-2">Document link on record</div>
+          <a href={doc} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-primary mt-2">View Full Document</a>
+        </div>
+      );
+    }
+
+    return (
+      <div className="p-2 text-center text-muted border rounded bg-light small">
+        Preview unavailable for this format.
+      </div>
+    );
+  };
+
+  if (isProcessing) {
+    return (
+      <div className="container-fluid min-vh-100 bg-white d-flex flex-column align-items-center justify-content-center text-center">
+        <div className="spinner-grow text-primary mb-4" style={{ width: '3rem', height: '3rem' }} role="status"></div>
+        <h4 className="fw-bold">Processing Request</h4>
+        <p className="text-muted">Communicating with secure cloud database...</p>
+      </div>
+    );
+  }
 
   if (authStep === 'login') {
     return (
@@ -203,7 +298,24 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
           </div>
           <div className="mb-4">
             <label className="form-label small fw-bold">Secret PIN (Default: 123456)</label>
-            <input type="password" underline-none className="form-control form-control-lg bg-light border-0 shadow-sm text-center fw-bold" style={{ letterSpacing: '0.5rem' }} value={pin} onChange={e => setPin(e.target.value)} placeholder="••••••" required />
+            <div className="input-group input-group-lg shadow-sm">
+              <input 
+                type={showPin ? "text" : "password"} 
+                className="form-control bg-light border-0 fw-bold text-center" 
+                style={{ letterSpacing: showPin ? 'normal' : '0.5rem' }} 
+                value={pin} 
+                onChange={e => setPin(e.target.value)} 
+                placeholder="••••••" 
+                required 
+              />
+              <button 
+                className="btn btn-light border-0 px-3" 
+                type="button" 
+                onClick={() => setShowPin(!showPin)}
+              >
+                <i className={`bi bi-eye${showPin ? '-slash' : ''}`}></i>
+              </button>
+            </div>
           </div>
           <button type="submit" className="btn btn-primary btn-lg w-100 py-3 rounded-4 shadow-lg fw-bold">
             LOGIN AS BLO
@@ -229,7 +341,26 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
           <form onSubmit={handleChangePin}>
             {error && <div className="alert alert-danger py-2 small text-center">{error}</div>}
             <div className="mb-4 text-center">
-              <input type="password" autoFocus className="form-control form-control-lg bg-light border-0 text-center fs-2 fw-bold" style={{ letterSpacing: '0.8rem' }} maxLength={6} value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} placeholder="0000" required />
+              <div className="input-group input-group-lg bg-light rounded-3 overflow-hidden">
+                <input 
+                  type={showPin ? "text" : "password"} 
+                  autoFocus 
+                  className="form-control border-0 bg-transparent text-center fs-2 fw-bold" 
+                  style={{ letterSpacing: showPin ? 'normal' : '0.8rem' }} 
+                  maxLength={6} 
+                  value={pin} 
+                  onChange={e => setPin(e.target.value.replace(/\D/g, ''))} 
+                  placeholder="0000" 
+                  required 
+                />
+                <button 
+                  className="btn btn-transparent border-0" 
+                  type="button" 
+                  onClick={() => setShowPin(!showPin)}
+                >
+                  <i className={`bi bi-eye${showPin ? '-slash' : ''} fs-4`}></i>
+                </button>
+              </div>
             </div>
             <button type="submit" className="btn btn-primary btn-lg w-100 rounded-4 py-3 fw-bold">UPDATE PIN</button>
           </form>
@@ -269,9 +400,12 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
             <div className="row g-3">
               <div className="col-6">
                 <div className="card border-0 shadow-sm rounded-4 p-3 text-center h-100">
-                  <i className={`bi bi-${currentBLO?.Verified === 'yes' ? 'patch-check-fill text-success' : 'clock-history text-warning'} fs-2 mb-2`}></i>
-                  <div className="extra-small fw-bold">STATUS</div>
-                  <div className="fw-bold small">{currentBLO?.Verified === 'yes' ? 'Verified' : 'Pending'}</div>
+                  <i className={`bi bi-${isVerified ? 'patch-check-fill text-success' : 'clock-history text-warning'} fs-2 mb-2`}></i>
+                  <div className="extra-small fw-bold">VERIFICATION</div>
+                  <div className="fw-bold small">
+                    {isVerified ? 'Verified' : 'Pending'}
+                    {!isVerified && <div className="extra-small text-muted mt-1 fw-normal" style={{ fontSize: '0.6rem', lineHeight: '1.2' }}>(will be done by tehsil office)</div>}
+                  </div>
                 </div>
               </div>
               <div className="col-6">
@@ -285,23 +419,23 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
 
             <div className="mt-5 text-center">
               <button onClick={() => setAuthStep('edit')} className="btn btn-primary btn-lg rounded-pill px-5 shadow-lg fw-bold">
-                <i className="bi bi-pencil-square me-2"></i>
-                {currentBLO?.Account_Number ? 'UPDATE ACCOUNT' : 'ADD ACCOUNT'}
+                <i className={`bi bi-${isVerified ? 'eye' : 'pencil-square'} me-2`}></i>
+                {isVerified ? 'VIEW ACCOUNT' : (currentBLO?.Account_Number ? 'UPDATE ACCOUNT' : 'ADD ACCOUNT')}
               </button>
             </div>
           </div>
         ) : (
           <div className="animate-fade-in pb-5">
-            <h5 className="fw-bold mb-4">Edit Details</h5>
+            <h5 className="fw-bold mb-4">{isVerified ? 'View Record' : 'Edit Details'}</h5>
             
             <div className="mb-4">
               <label className="form-label small fw-bold">Full Name</label>
-              <input type="text" className="form-control form-control-lg border-0 shadow-sm" value={editForm?.BLO_Name || ''} onChange={e => setEditForm(prev => prev ? ({ ...prev, BLO_Name: e.target.value }) : null)} required />
+              <input disabled={isVerified} type="text" className="form-control form-control-lg border-0 shadow-sm" value={editForm?.BLO_Name || ''} onChange={e => setEditForm(prev => prev ? ({ ...prev, BLO_Name: e.target.value }) : null)} required />
             </div>
 
             <div className="mb-4">
               <label className="form-label small fw-bold">Gender</label>
-              <select className="form-select form-select-lg border-0 shadow-sm" value={editForm?.Gender} onChange={e => setEditForm(prev => prev ? ({ ...prev, Gender: e.target.value as any }) : null)} required>
+              <select disabled={isVerified} className="form-select form-select-lg border-0 shadow-sm" value={editForm?.Gender} onChange={e => setEditForm(prev => prev ? ({ ...prev, Gender: e.target.value as any }) : null)} required>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
                 <option value="Other">Other</option>
@@ -311,42 +445,49 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
             <div className="mb-4">
               <label className="form-label small fw-bold">IFSC Code</label>
               <div className="input-group shadow-sm">
-                <input type="text" className="form-control border-0 bg-white fw-bold text-uppercase" placeholder="Enter IFSC" maxLength={11} value={editForm?.IFSC_Code} onChange={e => setEditForm(prev => prev ? ({ ...prev, IFSC_Code: e.target.value.toUpperCase().trim() }) : null)} />
-                <button onClick={handleIFSCSearch} className="btn btn-dark" disabled={isSearching}>
+                <input disabled={isVerified} type="text" className="form-control border-0 bg-white fw-bold text-uppercase" placeholder="Enter IFSC" maxLength={11} value={editForm?.IFSC_Code} onChange={e => setEditForm(prev => prev ? ({ ...prev, IFSC_Code: e.target.value.toUpperCase().trim() }) : null)} />
+                <button onClick={handleIFSCSearch} className="btn btn-dark" disabled={isSearching || isVerified}>
                   FETCH
                 </button>
               </div>
               {feedback && <div className={`extra-small mt-1 fw-bold ${feedback.includes('Error') ? 'text-danger' : 'text-primary'}`}>{feedback}</div>}
-              {stagedBranch && (
+              {(stagedBranch || editForm?.Branch_ID) && (
                 <div className="mt-2 p-2 bg-white rounded shadow-sm extra-small">
-                  <div className="fw-bold">{banks.find(b => b.Bank_ID === editForm?.Bank_ID)?.Bank_Name || stagedBank?.Bank_Name}</div>
-                  <div className="text-muted">{stagedBranch.Branch_Name}</div>
+                  <div className="fw-bold">{banks.find(b => b.Bank_ID === editForm?.Bank_ID)?.Bank_Name || stagedBank?.Bank_Name || 'Bank Found'}</div>
+                  <div className="text-muted">{stagedBranch?.Branch_Name || branches.find(br => br.Branch_ID === editForm?.Branch_ID)?.Branch_Name || ''}</div>
                 </div>
               )}
             </div>
 
             <div className="mb-4">
               <label className="form-label small fw-bold">Account Number</label>
-              <input type="text" className="form-control form-control-lg border-0 shadow-sm" value={editForm?.Account_Number} onChange={e => setEditForm(prev => prev ? ({ ...prev, Account_Number: e.target.value.replace(/\D/g, '') }) : null)} placeholder="Enter Account Number" />
+              <input disabled={isVerified} type="text" className="form-control form-control-lg border-0 shadow-sm" value={editForm?.Account_Number} onChange={e => setEditForm(prev => prev ? ({ ...prev, Account_Number: e.target.value.replace(/\D/g, '') }) : null)} placeholder="Enter Account Number" />
             </div>
 
             <div className="mb-4">
-              <label className="form-label small fw-bold">Passbook Copy (Max 2MB)</label>
-              <input type="file" className="form-control border-0 shadow-sm mb-2" accept="image/*,.pdf" onChange={handleFileChange} />
+              <label className="form-label small fw-bold">Passbook Copy (Max 4MB)</label>
+              {!isVerified && <input type="file" className="form-control border-0 shadow-sm mb-2" accept="image/*,.pdf" onChange={handleFileChange} />}
               {editForm?.Account_Passbook_Doc && (
-                <div className="rounded border bg-white p-2 text-center">
-                  {editForm.Account_Passbook_Doc.startsWith('data:image') ? (
-                    <img src={editForm.Account_Passbook_Doc} className="img-fluid rounded" alt="Preview" style={{ maxHeight: '150px' }} />
-                  ) : (
-                    <span className="small text-muted">File selected</span>
+                <div className="rounded border bg-white p-2">
+                  {renderDocumentPreview(editForm.Account_Passbook_Doc)}
+                  {!editForm.Account_Passbook_Doc.startsWith('data:') && !editForm.Account_Passbook_Doc.includes('drive.google.com') && (
+                     <div className="p-3 text-center">
+                        <i className="bi bi-file-earmark-pdf fs-1 text-danger"></i>
+                        <div className="small text-muted mt-1">Document Attached</div>
+                        <a href={editForm.Account_Passbook_Doc} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-outline-primary mt-2">Open Full Document</a>
+                     </div>
                   )}
                 </div>
               )}
             </div>
 
             <div className="fixed-bottom p-3 bg-white border-top shadow-lg d-flex gap-2">
-              <button onClick={() => setAuthStep('dashboard')} className="btn btn-outline-secondary flex-grow-1 rounded-3 py-3 fw-bold">CANCEL</button>
-              <button onClick={handleSaveAccount} className="btn btn-primary flex-grow-2 rounded-3 py-3 fw-bold shadow">SAVE</button>
+              <button onClick={() => setAuthStep('dashboard')} className={`btn btn-outline-secondary ${isVerified ? 'w-100' : 'flex-grow-1'} rounded-3 py-3 fw-bold`}>
+                {isVerified ? 'BACK TO DASHBOARD' : 'CANCEL'}
+              </button>
+              {!isVerified && (
+                <button onClick={handleSaveAccount} className="btn btn-primary flex-grow-2 rounded-3 py-3 fw-bold shadow">SAVE</button>
+              )}
             </div>
           </div>
         )}
