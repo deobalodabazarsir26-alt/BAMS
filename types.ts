@@ -53,7 +53,7 @@ export interface BLOAccount {
   Part_No?: string;
   Part_Name_EN?: string;
   Part_Name_HI?: string;
-  Sector_No?: string; // Specific to Supervisor accounts
+  Sector_No?: string;
   BLO_Name: string;
   Gender: 'Male' | 'Female' | 'Other';
   Desg_ID: string;
@@ -68,10 +68,14 @@ export interface BLOAccount {
   Verified: 'yes' | 'no';
   T_STMP_ADD: string;
   T_STMP_UPD: string;
+  // New Authentication Fields
+  Secret_PIN: string;
+  PIN_Changed: 'yes' | 'no';
 }
 
 export interface AppState {
   currentUser: User | null;
+  currentBLO: BLOAccount | null; // For BLO-specific mobile login
   accounts: BLOAccount[];
   avihitAccounts: BLOAccount[];
   supervisorAccounts: BLOAccount[];

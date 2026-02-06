@@ -71,8 +71,21 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
   };
 
   const handleEdit = (blo: BLOAccount) => {
+    // Critical Fix: Ensure Gender has a valid initial value if empty in sheet
+    const normalizedGender = (blo.Gender === 'Male' || blo.Gender === 'Female' || blo.Gender === 'Other') 
+      ? blo.Gender 
+      : 'Male';
+    
+    // Critical Fix: Ensure BLO_Name is prioritized if aliased key was used
+    const normalizedName = blo.BLO_Name || '';
+
     setSelectedBLO(blo);
-    setEditForm({ ...blo });
+    setEditForm({ 
+      ...blo, 
+      Gender: normalizedGender,
+      BLO_Name: normalizedName
+    });
+    
     setSearchFeedback({ type: 'none', message: '' });
     setStagedBank(null);
     setStagedBranch(null);
@@ -98,6 +111,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
         Bank_ID: localBranch.Bank_ID,
         Branch_ID: localBranch.Branch_ID
       }) : null);
+      setStagedBranch(localBranch);
       setSearchFeedback({ type: 'success', message: 'Bank details found in current directory.' });
       setIsSearching(false);
       return;
@@ -106,21 +120,40 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
     try {
       const result = await searchIFSC(ifscCode);
       if (result) {
-        const normalizedBankName = result.bankName.trim().toLowerCase();
-        let bank = banks.find(b => String(b.Bank_Name).toLowerCase() === normalizedBankName);
+        const normalizedBankName = result.bankName.trim().toUpperCase();
+        let bank = banks.find(b => String(b.Bank_Name).toUpperCase() === normalizedBankName);
         
-        const newBankObj: Bank | undefined = !bank ? {
-          Bank_ID: 'B_' + Date.now(),
-          Bank_Name: result.bankName,
-          T_STMP_ADD: new Date().toISOString(),
-          T_STMP_UPD: new Date().toISOString()
-        } : undefined;
+        let targetBankId = '';
+        let newBankObj: Bank | null = null;
 
-        const targetBankId = bank ? bank.Bank_ID : newBankObj!.Bank_ID;
+        if (bank) {
+          targetBankId = bank.Bank_ID;
+        } else {
+          const bankNums = banks.map(b => {
+            const m = b.Bank_ID.match(/\d+/);
+            return m ? parseInt(m[0]) : 0;
+          });
+          const nextBankNum = bankNums.length > 0 ? Math.max(...bankNums) + 1 : 1;
+          targetBankId = `B_${nextBankNum}`;
+
+          newBankObj = {
+            Bank_ID: targetBankId,
+            Bank_Name: result.bankName.toUpperCase(),
+            T_STMP_ADD: new Date().toISOString(),
+            T_STMP_UPD: new Date().toISOString()
+          };
+        }
+
+        const branchNums = branches.map(br => {
+          const m = br.Branch_ID.match(/\d+/);
+          return m ? parseInt(m[0]) : 0;
+        });
+        const nextBranchNum = branchNums.length > 0 ? Math.max(...branchNums) + 1 : 1;
+        const targetBranchId = `BR_${nextBranchNum}`;
 
         const newBranchObj: BankBranch = {
-          Branch_ID: 'BR_' + Date.now(),
-          Branch_Name: result.branchName,
+          Branch_ID: targetBranchId,
+          Branch_Name: result.branchName.toUpperCase(),
           IFSC_Code: result.ifsc.toUpperCase(),
           Bank_ID: targetBankId,
           T_STMP_ADD: new Date().toISOString(),
@@ -131,7 +164,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
           ...prev,
           IFSC_Code: result.ifsc.toUpperCase(),
           Bank_ID: targetBankId,
-          Branch_ID: newBranchObj.Branch_ID
+          Branch_ID: targetBranchId
         }) : null);
 
         if (newBankObj) setStagedBank(newBankObj);
@@ -139,7 +172,7 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
         
         setSearchFeedback({ 
           type: 'info', 
-          message: `Discovered new details! Bank: ${result.bankName}, Branch: ${result.branchName}. This will be added to the directory upon save.` 
+          message: `Discovered new details! Bank: ${result.bankName}, Branch: ${result.branchName}.` 
         });
       } else {
         setSearchFeedback({ type: 'error', message: 'Could not find bank details for this IFSC code.' });
@@ -195,16 +228,15 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
     if (!doc) return null;
     if (doc.includes('drive.google.com')) {
       const previewUrl = doc.replace('/view?usp=sharing', '/preview').replace('/view', '/preview');
-      return <iframe src={previewUrl} className="w-100 rounded border-0 shadow-sm" style={{ height: '500px' }}></iframe>;
+      return <iframe src={previewUrl} title="Passbook Preview" className="w-100 rounded border-0 shadow-sm" style={{ height: '500px' }}></iframe>;
     }
-    if (doc.startsWith('data:application/pdf')) return <iframe src={doc} className="w-100 rounded border-0" style={{ height: '500px' }}></iframe>;
+    if (doc.startsWith('data:application/pdf')) return <iframe src={doc} title="Passbook PDF" className="w-100 rounded border-0" style={{ height: '500px' }}></iframe>;
     if (doc.startsWith('data:image')) return <img src={doc} alt="Passbook" className="img-fluid" style={{ maxHeight: '500px' }} />;
     return <div className="alert alert-secondary text-center">Format not instantly viewable.</div>;
   };
 
   if (selectedBLO && editForm) {
     const isLocked = editForm.Verified === 'yes' && user.User_Type !== UserType.ADMIN;
-    const isFileNew = editForm.Account_Passbook_Doc && editForm.Account_Passbook_Doc.startsWith('data:');
     
     const currentBank = banks.find(b => String(b.Bank_ID).trim() === String(editForm.Bank_ID).trim()) || stagedBank;
     const currentBranch = branches.find(br => String(br.Branch_ID).trim() === String(editForm.Branch_ID).trim()) || stagedBranch;
@@ -233,7 +265,6 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                 </div>
               )}
 
-              {/* 1. Administrative Details Section - VIEW ONLY */}
               <div className="card border-0 shadow-sm mb-4 bg-light">
                 <div className="card-body p-4">
                   <h6 className="text-secondary fw-bold text-uppercase small mb-4 d-flex align-items-center">
@@ -279,7 +310,6 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                 </div>
               </div>
 
-              {/* 2. Personnel Details Section */}
               <div className="card border-0 shadow-sm mb-4">
                 <div className="card-body p-4">
                   <h6 className="text-primary fw-bold text-uppercase small mb-4 d-flex align-items-center">
@@ -289,12 +319,14 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                   <div className="row g-3">
                     <div className="col-md-6">
                       <label className="form-label extra-small fw-bold text-muted">Full Name</label>
-                      <input disabled={isLocked} type="text" className="form-control form-control-sm" value={editForm.BLO_Name} onChange={e => setEditForm({...editForm, BLO_Name: e.target.value})} />
+                      <input disabled={isLocked} type="text" className="form-control form-control-sm" value={editForm.BLO_Name || ''} onChange={e => setEditForm({...editForm, BLO_Name: e.target.value})} required />
                     </div>
                     <div className="col-md-3">
                       <label className="form-label extra-small fw-bold text-muted">Gender</label>
-                      <select disabled={isLocked} className="form-select form-select-sm" value={editForm.Gender} onChange={e => setEditForm({...editForm, Gender: e.target.value as any})}>
-                        <option>Male</option><option>Female</option><option>Other</option>
+                      <select disabled={isLocked} className="form-select form-select-sm" value={editForm.Gender} onChange={e => setEditForm({...editForm, Gender: e.target.value as any})} required>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
                       </select>
                     </div>
                     <div className="col-md-3">
@@ -344,7 +376,6 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
                 </div>
               </div>
 
-              {/* 3. Account Details Section */}
               <div className="card border-0 shadow-sm mb-5">
                 <div className="card-body p-4 bg-white border-start border-primary border-5 rounded-end">
                   <h6 className="text-primary fw-bold text-uppercase small mb-4 d-flex align-items-center">

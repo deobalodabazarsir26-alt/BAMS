@@ -1,6 +1,6 @@
 import { User, BLOAccount, Bank, BankBranch, Department, Designation, AccountCategory } from '../types';
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbwlXpzT6RmtJ_DuJtRX0Helk14mZ3vB7cBisEMyPlMyfwodmjmLqGr4Kd7M9HjToNgtVA/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbxZ5347MkDNTJD1AX7KTE7zDCZXb2ckjccyJuGDClnHZTdHrBq4iuZ_YkHJ61WjCV5-Dw/exec';
 
 const safeFetch = async (url: string, options: RequestInit = {}) => {
   const response = await fetch(url, {
