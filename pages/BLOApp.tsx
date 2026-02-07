@@ -29,7 +29,19 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
   const [stagedBranch, setStagedBranch] = useState<BankBranch | null>(null);
   const [feedback, setFeedback] = useState('');
 
+  const lastSearchedIFSC = useRef<string>('');
   const isVerified = currentBLO?.Verified === 'yes';
+
+  // Automated IFSC Search Effect
+  useEffect(() => {
+    if (editForm?.IFSC_Code && editForm.IFSC_Code.length === 11 && editForm.IFSC_Code !== lastSearchedIFSC.current) {
+      handleIFSCSearch();
+    } else if (editForm?.IFSC_Code && editForm.IFSC_Code.length < 11) {
+      setFeedback('');
+      // We don't necessarily null stagedBranch here to allow manual clicking of FETCH 
+      // if the user had reached 11 but then backspaced, but logically a code < 11 is invalid.
+    }
+  }, [editForm?.IFSC_Code]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,13 +105,15 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
 
   const handleIFSCSearch = async () => {
     if (!editForm?.IFSC_Code || editForm.IFSC_Code.length !== 11) return;
+    
+    const ifscToSearch = editForm.IFSC_Code.toUpperCase();
+    lastSearchedIFSC.current = ifscToSearch;
+    
     setIsSearching(true);
     setFeedback('');
     setStagedBank(null);
     setStagedBranch(null);
 
-    const ifscToSearch = editForm.IFSC_Code.toUpperCase();
-    
     const localBranch = branches.find(br => br.IFSC_Code.toUpperCase() === ifscToSearch);
     if (localBranch) {
       setEditForm(prev => prev ? ({
@@ -165,7 +179,7 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
       setStagedBranch(newBranchObj);
       setFeedback('Success: New details fetched!');
     } else {
-      setFeedback('Error: IFSC not found.');
+      setFeedback('Error: IFSC code is wrong.');
     }
     setIsSearching(false);
   };
@@ -189,8 +203,15 @@ const BLOApp: React.FC<BLOAppProps> = ({ accounts, banks, branches, departments,
   const handleSaveAccount = async () => {
     if (!editForm || !currentBLO) return;
     
+    // Strict IFSC Validation
     if (!editForm.IFSC_Code || editForm.IFSC_Code.length !== 11) {
       alert("A valid 11-digit IFSC Code is mandatory.");
+      return;
+    }
+
+    // Ensure search was successful before allowing save
+    if (feedback.includes('Error') || (!stagedBranch && !branches.find(br => br.IFSC_Code === editForm.IFSC_Code))) {
+      alert("Cannot save: The entered IFSC code is wrong or not found in banking records.");
       return;
     }
     

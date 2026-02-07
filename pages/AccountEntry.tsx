@@ -36,6 +36,11 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
     supervisor: 'Supervisor'
   };
 
+  const formatId = (val: string | number | undefined) => {
+    if (val === undefined || val === null || val === '') return '000';
+    return String(val).padStart(3, '0');
+  };
+
   const uniqueTehsils = useMemo(() => Array.from(new Set(accounts.map(a => a.Tehsil))).sort(), [accounts]);
   const uniqueACs = useMemo(() => Array.from(new Set(accounts.map(a => a.AC_Name))).sort(), [accounts]);
 
@@ -477,7 +482,9 @@ const AccountEntry: React.FC<AccountEntryProps> = ({ user, accounts, banks, bran
               {filteredAccounts.map(blo => (
                 <tr key={blo.BLO_ID} className={blo.Verified === 'yes' ? 'table-success-subtle' : ''}>
                   <td className="px-4 py-3">
-                    <div className="fw-bold">{type === 'supervisor' ? `S-${blo.Sector_No || 'NA'}` : `P-${blo.Part_No}`}</div>
+                    <div className="fw-bold">
+                      {type === 'supervisor' ? `S-${formatId(blo.Sector_No)}` : `P-${formatId(blo.Part_No)}`}
+                    </div>
                     <div className="extra-small text-muted">{blo.AC_Name}</div>
                   </td>
                   <td className="px-4 py-3">

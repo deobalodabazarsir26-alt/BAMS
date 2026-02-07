@@ -28,8 +28,13 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
   const typeLabels: Record<AccountCategory, string> = { blo: 'BLO', avihit: 'Avihit', supervisor: 'Supervisor' };
 
   const getDesgName = (id: string) => {
-    const desg = designations.find(d => String(d.Desg_ID).trim() === String(id).trim());
+    const desg = designations.find(d => String(d.Dept_ID).trim() === String(id).trim());
     return desg ? desg.Desg_Name : 'Officer';
+  };
+
+  const formatId = (val: string | number | undefined) => {
+    if (val === undefined || val === null) return '000';
+    return String(val).padStart(3, '0');
   };
   
   const filteredAccounts = useMemo(() => {
@@ -70,23 +75,32 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
   };
 
   const getExportData = () => {
-    return accounts.filter(a => a.Verified === 'yes').map(a => {
-      const bank = banks.find(b => String(b.Bank_ID).trim() === String(a.Bank_ID).trim());
-      return {
-        'Identifier': type === 'supervisor' ? `S-${a.Sector_No}` : `P-${a.Part_No}`,
-        'AC': a.AC_No,
-        'Name': a.BLO_Name,
-        'Bank': bank ? bank.Bank_Name : '---',
-        'IFSC': a.IFSC_Code,
-        'Account': a.Account_Number,
-        'Status': 'Verified'
-      };
-    });
+    // Map to export format first, then sort by the generated Identifier string
+    return accounts
+      .filter(a => a.Verified === 'yes')
+      .map(a => {
+        const bank = banks.find(b => String(b.Bank_ID).trim() === String(a.Bank_ID).trim());
+        const idVal = type === 'supervisor' ? a.Sector_No : a.Part_No;
+        const identifier = type === 'supervisor' ? `S-${formatId(idVal)}` : `P-${formatId(idVal)}`;
+        return {
+          'Identifier': identifier,
+          'AC': a.AC_No,
+          'Name': a.BLO_Name,
+          'Bank': bank ? bank.Bank_Name : '---',
+          'IFSC': a.IFSC_Code,
+          'Account': a.Account_Number,
+          'Status': 'Verified'
+        };
+      })
+      .sort((a, b) => a.Identifier.localeCompare(b.Identifier));
   };
 
   const handleExportExcel = () => {
     const data = getExportData();
-    if (data.length === 0) return;
+    if (data.length === 0) {
+      alert("No verified accounts to export.");
+      return;
+    }
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Verified");
@@ -193,7 +207,12 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
               {paginatedAccounts.map(blo => (
                 <button key={blo.BLO_ID} onClick={() => setSelectedBLO(blo)} className={`list-group-item list-group-item-action p-3 border-0 border-bottom ${selectedBLO?.BLO_ID === blo.BLO_ID ? 'bg-primary-subtle' : ''}`}>
                   <div className="d-flex justify-content-between">
-                    <div><h6 className="fw-bold mb-0">{blo.BLO_Name}</h6><small>{type === 'supervisor' ? `S-${blo.Sector_No}` : `P-${blo.Part_No}`} | {blo.Tehsil}</small></div>
+                    <div>
+                      <h6 className="fw-bold mb-0">{blo.BLO_Name}</h6>
+                      <small>
+                        {type === 'supervisor' ? `S-${formatId(blo.Sector_No)}` : `P-${formatId(blo.Part_No)}`} | {blo.Tehsil}
+                      </small>
+                    </div>
                     {blo.Verified === 'yes' && <i className="bi bi-check-circle-fill text-success"></i>}
                   </div>
                 </button>
@@ -231,7 +250,7 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
                   </div>
                   <div className="bg-light p-3 rounded mb-4">
                     <div className="small mb-1"><span className="fw-bold">Tehsil:</span> {selectedBLO.Tehsil}</div>
-                    <div className="small mb-1"><span className="fw-bold">{type === 'supervisor' ? 'Sector' : 'Part'}:</span> {type === 'supervisor' ? selectedBLO.Sector_No : selectedBLO.Part_No}</div>
+                    <div className="small mb-1"><span className="fw-bold">{type === 'supervisor' ? 'Sector' : 'Part'}:</span> {type === 'supervisor' ? formatId(selectedBLO.Sector_No) : formatId(selectedBLO.Part_No)}</div>
                     <div className="small"><span className="fw-bold">Mobile:</span> {selectedBLO.Mobile}</div>
                   </div>
                   <button onClick={() => handleVerifyToggle(selectedBLO)} className={`btn ${selectedBLO.Verified === 'yes' ? 'btn-danger' : 'btn-success'} py-3 mt-auto fw-bold`}>
