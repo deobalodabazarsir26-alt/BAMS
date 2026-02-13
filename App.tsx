@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import AccountEntry from './pages/AccountEntry';
 import Verification from './pages/Verification';
 import Reports from './pages/Reports';
+import ConsolidatedReport from './pages/ConsolidatedReport';
 import UserManagement from './pages/UserManagement';
 import Sidebar from './components/Sidebar';
 import BLOApp from './pages/BLOApp';
@@ -73,7 +74,6 @@ const App: React.FC = () => {
     <div className="text-center"><div className="spinner-border text-primary mb-3"></div><div>Syncing Cloud Database...</div></div>
   </div>;
 
-  // Handle BLO Mobile App view separately
   if (isMobileMode) {
     return <BLOApp 
       accounts={state.accounts} 
@@ -86,7 +86,6 @@ const App: React.FC = () => {
     />;
   }
 
-  // Admin/Tehsil Login View
   if (!state.currentUser) {
     return <Login 
       users={state.users} 
@@ -114,11 +113,22 @@ const App: React.FC = () => {
     if (currentPage.startsWith('reports-')) {
       const type = currentPage.split('-')[1] as AccountCategory;
       const data = type === 'blo' ? state.accounts : type === 'avihit' ? state.avihitAccounts : state.supervisorAccounts;
-      return <Reports type={type} accounts={data} users={state.users} user={state.currentUser!} />;
+      return (
+        <Reports 
+          type={type} 
+          accounts={data} 
+          bloAccounts={state.accounts}
+          avihitAccounts={state.avihitAccounts}
+          supervisorAccounts={state.supervisorAccounts}
+          users={state.users} 
+          user={state.currentUser!} 
+        />
+      );
     }
 
     switch (currentPage) {
       case 'dashboard': return <Dashboard user={state.currentUser!} accounts={[...state.accounts, ...state.avihitAccounts, ...state.supervisorAccounts]} />;
+      case 'consolidated-report': return <ConsolidatedReport user={state.currentUser!} bloAccounts={state.accounts} avihitAccounts={state.avihitAccounts} supervisorAccounts={state.supervisorAccounts} />;
       case 'users': return <UserManagement currentUser={state.currentUser!} users={state.users} onUpdateUser={async (u) => { await updateUserOnSheet(u); await loadData(); }} />;
       default: return <Dashboard user={state.currentUser!} accounts={[...state.accounts, ...state.avihitAccounts, ...state.supervisorAccounts]} />;
     }

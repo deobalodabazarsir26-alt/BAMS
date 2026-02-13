@@ -47,6 +47,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, onNavigate, currentPage, isOpen
         { id: 'reports-supervisor', label: 'Supervisor Report' }
       ]
     },
+    { id: 'consolidated-report', label: 'Consolidated Summary', icon: 'bi-layout-three-columns', type: 'single' },
     { id: 'users', label: 'User Management', icon: 'bi-people-fill', type: 'single' },
   ];
 
@@ -55,7 +56,6 @@ const Sidebar: React.FC<SidebarProps> = ({ user, onNavigate, currentPage, isOpen
       <div className={`sidebar-overlay ${isOpen ? 'show' : ''} d-lg-none`} onClick={() => setIsOpen(false)}></div>
       
       <div className={`app-sidebar d-flex flex-column p-3 text-white ${isOpen ? 'show' : ''}`}>
-        {/* Header - Fixed Height */}
         <div className="d-flex align-items-center mb-4 px-2 flex-shrink-0">
           <div className="bg-primary rounded-3 p-2 me-2">
             <i className="bi bi-shield-check text-white fs-4"></i>
@@ -63,7 +63,6 @@ const Sidebar: React.FC<SidebarProps> = ({ user, onNavigate, currentPage, isOpen
           <h5 className="mb-0 fw-bold">ACCOUNT PORTAL</h5>
         </div>
 
-        {/* User Card - Fixed Height */}
         <div className="card bg-dark border-0 mb-4 text-white p-3 flex-shrink-0">
           <div className="d-flex align-items-center">
             <div className="avatar bg-secondary rounded-circle me-3 d-flex align-items-center justify-content-center" style={{ width: '40px', height: '40px' }}>
@@ -76,7 +75,6 @@ const Sidebar: React.FC<SidebarProps> = ({ user, onNavigate, currentPage, isOpen
           </div>
         </div>
 
-        {/* Nav List - Grows to fill space, causes container scroll if needed */}
         <ul className="nav nav-pills flex-column mb-auto">
           {menuSections.map((section) => (
             <li className="nav-item" key={section.id}>
@@ -119,7 +117,6 @@ const Sidebar: React.FC<SidebarProps> = ({ user, onNavigate, currentPage, isOpen
           ))}
         </ul>
 
-        {/* Footer - Pushed to bottom, stays there if space allows, otherwise scrolls into view */}
         <div className="flex-shrink-0 mt-3">
           <hr className="border-secondary opacity-25" />
           <button 

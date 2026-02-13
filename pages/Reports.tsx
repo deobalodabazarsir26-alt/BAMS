@@ -3,7 +3,10 @@ import { BLOAccount, User, UserType, AccountCategory } from '../types';
 
 interface ReportsProps {
   user: User;
-  accounts: BLOAccount[];
+  accounts: BLOAccount[]; // This is the 'active' category filtered for current view
+  bloAccounts?: BLOAccount[];
+  avihitAccounts?: BLOAccount[];
+  supervisorAccounts?: BLOAccount[];
   users: User[];
   type: AccountCategory;
 }
@@ -12,9 +15,14 @@ const Reports: React.FC<ReportsProps> = ({ user, accounts, users, type }) => {
   const isAdmin = user.User_Type === UserType.ADMIN;
   const typeLabels: Record<AccountCategory, string> = { blo: 'BLO', avihit: 'Avihit', supervisor: 'Supervisor' };
 
-  const displayedAccounts = isAdmin 
-    ? accounts 
-    : accounts.filter(a => String(a.User_ID).trim() === String(user.User_ID).trim());
+  // Helper to filter data by user context
+  const filterByContext = (list: BLOAccount[]) => {
+    return isAdmin 
+      ? list 
+      : list.filter(a => String(a.User_ID).trim() === String(user.User_ID).trim());
+  };
+
+  const displayedAccounts = filterByContext(accounts);
 
   const globalTotal = displayedAccounts.length;
   const globalEntered = displayedAccounts.filter(a => a.Account_Number && String(a.Account_Number).trim() !== '').length;
@@ -23,6 +31,7 @@ const Reports: React.FC<ReportsProps> = ({ user, accounts, users, type }) => {
   const globalEntryPct = globalTotal > 0 ? Math.round((globalEntered / globalTotal) * 100) : 0;
   const globalVerifyPct = globalTotal > 0 ? Math.round((globalVerified / globalTotal) * 100) : 0;
 
+  // User breakdown for the active category
   const userBreakdown = isAdmin ? users.map(u => {
     const userAccounts = accounts.filter(a => String(a.User_ID).trim() === String(u.User_ID).trim());
     const total = userAccounts.length;
@@ -41,18 +50,18 @@ const Reports: React.FC<ReportsProps> = ({ user, accounts, users, type }) => {
   }).filter(u => u.total > 0) : [];
 
   return (
-    <div className="container-fluid py-2">
+    <div className="container-fluid py-2 pb-5">
       <div className="card shadow-sm p-4 border-0 mb-4">
         <h3 className="fw-bold mb-1">{typeLabels[type]} Report</h3>
         <p className="text-muted small mb-0">Milestones for {typeLabels[type]} data entries.</p>
       </div>
 
-      <div className="row g-4 mb-4">
+      <div className="row g-4 mb-5">
         <div className="col-md-4">
           <div className="card border-0 shadow-sm bg-primary text-white p-4">
             <div className="d-flex justify-content-between align-items-center">
               <div>
-                <small className="opacity-75">TOTAL PARTS</small>
+                <small className="opacity-75">TOTAL {type === 'supervisor' ? 'SECTORS' : 'PARTS'}</small>
                 <h2 className="fw-bold mb-0">{globalTotal}</h2>
               </div>
               <i className="bi bi-people-fill fs-1 opacity-25"></i>
@@ -84,7 +93,10 @@ const Reports: React.FC<ReportsProps> = ({ user, accounts, users, type }) => {
       </div>
 
       {isAdmin && (
-        <div className="card border-0 shadow-sm overflow-hidden">
+        <div className="card border-0 shadow-sm overflow-hidden bg-white">
+          <div className="card-header bg-light py-3 px-4">
+            <h6 className="mb-0 fw-bold text-muted text-uppercase small">Officer Performance: {typeLabels[type]}</h6>
+          </div>
           <div className="table-responsive">
             <table className="table table-hover align-middle mb-0">
               <thead className="table-light">
