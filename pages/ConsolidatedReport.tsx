@@ -34,7 +34,8 @@ const ConsolidatedReport: React.FC<ConsolidatedReportProps> = ({ user, bloAccoun
         const tAccounts = list.filter(a => a.Tehsil === tehsil);
         const target = tAccounts.length;
         const entry = tAccounts.filter(a => a.Account_Number && String(a.Account_Number).trim() !== '').length;
-        return { target, entry, remaining: target - entry };
+        const verified = tAccounts.filter(a => a.Verified === 'yes').length;
+        return { target, entry, verified, remaining: target - entry };
       };
 
       return {
@@ -48,22 +49,37 @@ const ConsolidatedReport: React.FC<ConsolidatedReportProps> = ({ user, bloAccoun
 
   const totals = useMemo(() => {
     return tehsilSummary.reduce((acc, row) => ({
-      blo: { target: acc.blo.target + row.blo.target, entry: acc.blo.entry + row.blo.entry, remaining: acc.blo.remaining + row.blo.remaining },
-      avihit: { target: acc.avihit.target + row.avihit.target, entry: acc.avihit.entry + row.avihit.entry, remaining: acc.avihit.remaining + row.avihit.remaining },
-      supervisor: { target: acc.supervisor.target + row.supervisor.target, entry: acc.supervisor.entry + row.supervisor.entry, remaining: acc.supervisor.remaining + row.supervisor.remaining }
+      blo: { 
+        target: acc.blo.target + row.blo.target, 
+        entry: acc.blo.entry + row.blo.entry, 
+        verified: acc.blo.verified + row.blo.verified,
+        remaining: acc.blo.remaining + row.blo.remaining 
+      },
+      avihit: { 
+        target: acc.avihit.target + row.avihit.target, 
+        entry: acc.avihit.entry + row.avihit.entry, 
+        verified: acc.avihit.verified + row.avihit.verified,
+        remaining: acc.avihit.remaining + row.avihit.remaining 
+      },
+      supervisor: { 
+        target: acc.supervisor.target + row.supervisor.target, 
+        entry: acc.supervisor.entry + row.supervisor.entry, 
+        verified: acc.supervisor.verified + row.supervisor.verified,
+        remaining: acc.supervisor.remaining + row.supervisor.remaining 
+      }
     }), {
-      blo: { target: 0, entry: 0, remaining: 0 },
-      avihit: { target: 0, entry: 0, remaining: 0 },
-      supervisor: { target: 0, entry: 0, remaining: 0 }
+      blo: { target: 0, entry: 0, verified: 0, remaining: 0 },
+      avihit: { target: 0, entry: 0, verified: 0, remaining: 0 },
+      supervisor: { target: 0, entry: 0, verified: 0, remaining: 0 }
     });
   }, [tehsilSummary]);
 
   const handleExportExcel = () => {
     const exportData = tehsilSummary.map(row => ({
       'Tehsil': row.tehsil,
-      'BLO Target': row.blo.target, 'BLO Entry': row.blo.entry, 'BLO Remaining': row.blo.remaining,
-      'Avihit Target': row.avihit.target, 'Avihit Entry': row.avihit.entry, 'Avihit Remaining': row.avihit.remaining,
-      'Supervisor Target': row.supervisor.target, 'Supervisor Entry': row.supervisor.entry, 'Supervisor Remaining': row.supervisor.remaining
+      'BLO Target': row.blo.target, 'BLO Entry': row.blo.entry, 'BLO Verified': row.blo.verified, 'BLO Remaining': row.blo.remaining,
+      'Avihit Target': row.avihit.target, 'Avihit Entry': row.avihit.entry, 'Avihit Verified': row.avihit.verified, 'Avihit Remaining': row.avihit.remaining,
+      'Supervisor Target': row.supervisor.target, 'Supervisor Entry': row.supervisor.entry, 'Supervisor Verified': row.supervisor.verified, 'Supervisor Remaining': row.supervisor.remaining
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -90,19 +106,22 @@ const ConsolidatedReport: React.FC<ConsolidatedReportProps> = ({ user, bloAccoun
             <thead className="table-light">
               <tr className="extra-small fw-bold">
                 <th rowSpan={2} className="align-middle bg-light text-start ps-4" style={{ width: '15%' }}>TEHSIL NAME</th>
-                <th colSpan={3} className="bg-primary bg-opacity-10 text-primary py-2 border-bottom-0">BLO (PARTS)</th>
-                <th colSpan={3} className="bg-info bg-opacity-10 text-info py-2 border-bottom-0">AVIHIT (PARTS)</th>
-                <th colSpan={3} className="bg-success bg-opacity-10 text-success py-2 border-bottom-0">SUPERVISOR (SECTORS)</th>
+                <th colSpan={4} className="bg-primary bg-opacity-10 text-primary py-2 border-bottom-0">BLO (PARTS)</th>
+                <th colSpan={4} className="bg-info bg-opacity-10 text-info py-2 border-bottom-0">AVIHIT (PARTS)</th>
+                <th colSpan={4} className="bg-success bg-opacity-10 text-success py-2 border-bottom-0">SUPERVISOR (SECTORS)</th>
               </tr>
               <tr className="extra-small fw-bold" style={{ fontSize: '0.65rem' }}>
                 <th className="bg-primary text-white py-1">Target</th>
                 <th className="bg-primary text-white py-1">Entry</th>
+                <th className="bg-primary text-white py-1">Verf.</th>
                 <th className="bg-primary text-white py-1">Rem.</th>
                 <th className="bg-info text-white py-1">Target</th>
                 <th className="bg-info text-white py-1">Entry</th>
+                <th className="bg-info text-white py-1">Verf.</th>
                 <th className="bg-info text-white py-1">Rem.</th>
                 <th className="bg-success text-white py-1">Target</th>
                 <th className="bg-success text-white py-1">Entry</th>
+                <th className="bg-success text-white py-1">Verf.</th>
                 <th className="bg-success text-white py-1">Rem.</th>
               </tr>
             </thead>
@@ -112,12 +131,15 @@ const ConsolidatedReport: React.FC<ConsolidatedReportProps> = ({ user, bloAccoun
                   <td className="text-start ps-4 fw-bold">{row.tehsil}</td>
                   <td className="bg-primary bg-opacity-10">{row.blo.target}</td>
                   <td className="bg-primary bg-opacity-10">{row.blo.entry}</td>
+                  <td className="bg-primary bg-opacity-10 text-success">{row.blo.verified}</td>
                   <td className={`bg-primary bg-opacity-10 fw-bold ${row.blo.remaining > 0 ? 'text-danger' : 'text-success'}`}>{row.blo.remaining}</td>
                   <td className="bg-info bg-opacity-10">{row.avihit.target}</td>
                   <td className="bg-info bg-opacity-10">{row.avihit.entry}</td>
+                  <td className="bg-info bg-opacity-10 text-success">{row.avihit.verified}</td>
                   <td className={`bg-info bg-opacity-10 fw-bold ${row.avihit.remaining > 0 ? 'text-danger' : 'text-success'}`}>{row.avihit.remaining}</td>
                   <td className="bg-success bg-opacity-10">{row.supervisor.target}</td>
                   <td className="bg-success bg-opacity-10">{row.supervisor.entry}</td>
+                  <td className="bg-success bg-opacity-10 text-success">{row.supervisor.verified}</td>
                   <td className={`bg-success bg-opacity-10 fw-bold ${row.supervisor.remaining > 0 ? 'text-danger' : 'text-success'}`}>{row.supervisor.remaining}</td>
                 </tr>
               ))}
@@ -127,12 +149,15 @@ const ConsolidatedReport: React.FC<ConsolidatedReportProps> = ({ user, bloAccoun
                 <td className="text-start ps-4">GRAND TOTAL</td>
                 <td>{totals.blo.target}</td>
                 <td>{totals.blo.entry}</td>
+                <td className="text-success">{totals.blo.verified}</td>
                 <td className="text-warning">{totals.blo.remaining}</td>
                 <td>{totals.avihit.target}</td>
                 <td>{totals.avihit.entry}</td>
+                <td className="text-success">{totals.avihit.verified}</td>
                 <td className="text-warning">{totals.avihit.remaining}</td>
                 <td>{totals.supervisor.target}</td>
                 <td>{totals.supervisor.entry}</td>
+                <td className="text-success">{totals.supervisor.verified}</td>
                 <td className="text-warning">{totals.supervisor.remaining}</td>
               </tr>
             </tfoot>

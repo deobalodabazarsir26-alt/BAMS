@@ -75,8 +75,10 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
   };
 
   const getExportData = () => {
-    // Map to export format first, then sort by the generated Identifier string
-    return accounts
+    // Requirements fulfilled: 
+    // 1. Uses filteredAccounts (handles Admin filters vs Normal User scope)
+    // 2. Sorts by AC_No (numeric) then Identifier
+    return filteredAccounts
       .filter(a => a.Verified === 'yes')
       .map(a => {
         const bank = banks.find(b => String(b.Bank_ID).trim() === String(a.Bank_ID).trim());
@@ -92,7 +94,14 @@ const Verification: React.FC<VerificationProps> = ({ user, accounts, banks, bran
           'Status': 'Verified'
         };
       })
-      .sort((a, b) => a.Identifier.localeCompare(b.Identifier));
+      .sort((a, b) => {
+        // Numeric sort for AC first
+        const acA = Number(a.AC) || 0;
+        const acB = Number(b.AC) || 0;
+        if (acA !== acB) return acA - acB;
+        // Then alphanumeric sort for Identifier
+        return a.Identifier.localeCompare(b.Identifier);
+      });
   };
 
   const handleExportExcel = () => {
