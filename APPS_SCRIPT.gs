@@ -49,6 +49,10 @@ function doPost(e) {
       result = updateRecord('Avihit_Account', 'BLO_ID', id, payload);
     } else if (action === 'updateSupervisorAccount') {
       result = updateRecord('Supervisor_Account', 'BLO_ID', id, payload);
+    } else if (action === 'renameFiles') {
+      result = renameAllExistingFiles();
+    } else if (action === 'renameBatch') {
+      result = renameBatchFiles(payload);
     } else if (action === 'verifyAccount') {
       result = updateRecord('BLO_Account', 'BLO_ID', id, { Verified: payload.Verified });
     } else if (action === 'verifyAvihitAccount') {
@@ -190,8 +194,17 @@ function updateRecord(sheetName, idColumnName, idValue, updateObj) {
                if (!val.startsWith("'")) val = "'" + val;
             }
             if (key === 'Account_Passbook_Doc' && String(val).startsWith('data:')) {
-               const partInfo = updateObj['Sector_No'] ? ("S_" + updateObj['Sector_No']) : (updateObj['Part_No'] ? ("P_" + updateObj['Part_No']) : "ID_" + idValue);
-               val = uploadBase64ToDrive(val, partInfo + "_" + (updateObj['BLO_Name'] || 'Officer')) || val;
+               let prefix = 'BLO';
+               if (sheetName.toLowerCase().includes('avihit')) prefix = 'Avihit';
+               if (sheetName.toLowerCase().includes('supervisor')) prefix = 'Supervisor';
+               
+               const acNo = updateObj['AC_No'] || getSheetValue(data[i], headers, 'AC_No') || 'NA';
+               const partNo = updateObj['Part_No'] || updateObj['Sector_No'] || getSheetValue(data[i], headers, 'Part_No') || getSheetValue(data[i], headers, 'Sector_No') || 'NA';
+               const mobile = updateObj['Mobile'] || getSheetValue(data[i], headers, 'Mobile') || 'NA';
+               
+               const newFileName = prefix + "_" + acNo + "_" + partNo + "_" + mobile;
+               const folderName = prefix + "_Accounts";
+               val = uploadBase64ToDrive(val, newFileName, folderName) || val;
             }
             
             sheet.getRange(i + 1, colIndex + 1).setValue(val);
@@ -206,18 +219,36 @@ function updateRecord(sheetName, idColumnName, idValue, updateObj) {
   }
 }
 
-function uploadBase64ToDrive(base64Data, fileName) {
+function uploadBase64ToDrive(base64Data, fileName, subfolderName) {
   try {
     const parts = base64Data.split(',');
     if (parts.length < 2) return null;
     const mimeType = parts[0].match(/:(.*?);/)[1];
     const decodedData = Utilities.base64Decode(parts[1].replace(/\s/g, ''));
     const blob = Utilities.newBlob(decodedData, mimeType, fileName);
-    const folder = DriveApp.getFolderById(TARGET_FOLDER_ID);
-    const file = folder.createFile(blob);
+    
+    let parentFolder = DriveApp.getFolderById(TARGET_FOLDER_ID);
+    let targetFolder = parentFolder;
+    
+    if (subfolderName) {
+      targetFolder = getOrCreateSubfolder(parentFolder, subfolderName);
+    }
+
+    const file = targetFolder.createFile(blob);
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     return file.getUrl();
   } catch (e) { return null; }
+}
+
+function getOrCreateSubfolder(parent, folderName) {
+  const folders = parent.getFoldersByName(folderName);
+  if (folders.hasNext()) {
+    return folders.next();
+  } else {
+    const newFolder = parent.createFolder(folderName);
+    newFolder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return newFolder;
+  }
 }
 
 function addRecord(sheetName, recordObj) {
@@ -227,6 +258,22 @@ function addRecord(sheetName, recordObj) {
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => normalizeHeader(h));
     const newRow = new Array(headers.length).fill('');
     recordObj['T_STMP_ADD'] = recordObj['T_STMP_UPD'] = new Date().toISOString();
+    
+    // Handle File Naming for new additions if they contain a document
+    if (recordObj['Account_Passbook_Doc'] && String(recordObj['Account_Passbook_Doc']).startsWith('data:')) {
+      let prefix = 'BLO';
+      if (sheetName.toLowerCase().includes('avihit')) prefix = 'Avihit';
+      if (sheetName.toLowerCase().includes('supervisor')) prefix = 'Supervisor';
+      
+      const acNo = recordObj['AC_No'] || 'NA';
+      const partNo = recordObj['Part_No'] || recordObj['Sector_No'] || 'NA';
+      const mobile = recordObj['Mobile'] || 'NA';
+      
+      const fileName = prefix + "_" + acNo + "_" + partNo + "_" + mobile;
+      const folderName = prefix + "_Accounts";
+      recordObj['Account_Passbook_Doc'] = uploadBase64ToDrive(recordObj['Account_Passbook_Doc'], fileName, folderName) || recordObj['Account_Passbook_Doc'];
+    }
+
     for (let key in recordObj) {
       const idx = headers.indexOf(normalizeHeader(key));
       if (idx !== -1) newRow[idx] = recordObj[key];
@@ -241,4 +288,146 @@ function checkConfig() {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     return { success: true, spreadsheet: ss.getName() };
   } catch (e) { return { success: false, error: e.toString() }; }
+}
+
+function getSheetValue(row, headers, columnName) {
+  const idx = headers.indexOf(normalizeHeader(columnName));
+  return (idx !== -1 && row[idx]) ? String(row[idx]).trim() : '';
+}
+
+function renameBatchFiles(items) {
+  const results = [];
+  try {
+    const parentFolder = DriveApp.getFolderById(TARGET_FOLDER_ID);
+    
+    items.forEach(item => {
+      try {
+        let fileId = '';
+        // Try to extract ID from URL first
+        const fileIdMatch = String(item.url || '').match(/[-\w]{25,}/);
+        if (fileIdMatch) {
+          fileId = fileIdMatch[0];
+        } else if (String(item.url || '').length > 20) {
+          // If no complex URL match but string is long, might be just the ID
+          fileId = String(item.url).trim();
+        }
+
+        if (fileId) {
+          const file = DriveApp.getFileById(fileId);
+          const currentName = file.getName();
+          const targetFolderName = item.type ? item.type + "_Accounts" : "";
+          
+          let isInCorrectFolder = true;
+          let targetFolder = null;
+
+          if (targetFolderName) {
+            targetFolder = getOrCreateSubfolder(parentFolder, targetFolderName);
+            const parents = file.getParents();
+            const currentParentIds = [];
+            while (parents.hasNext()) {
+              currentParentIds.push(parents.next().getId());
+            }
+            isInCorrectFolder = currentParentIds.includes(targetFolder.getId()) && currentParentIds.length === 1;
+          }
+
+          // Skip if already correct
+          if (currentName === item.newName && isInCorrectFolder) {
+            results.push({ id: item.id, success: true, skipped: true });
+            return;
+          }
+
+          // Update Name if needed
+          if (currentName !== item.newName) {
+            file.setName(item.newName);
+          }
+          
+          // Move if needed
+          if (targetFolder && !isInCorrectFolder) {
+             const p2 = file.getParents();
+             while (p2.hasNext()) {
+               p2.next().removeFile(file);
+             }
+             targetFolder.addFile(file);
+          }
+          
+          results.push({ id: item.id, success: true });
+        } else {
+          results.push({ id: item.id, success: false, error: "Invalid Drive URL or ID: " + item.url });
+        }
+      } catch (e) {
+        results.push({ id: item.id, success: false, error: e.toString() });
+      }
+    });
+    return { success: true, results: results };
+  } catch (error) {
+    return { success: false, error: error.toString() };
+  }
+}
+
+/**
+ * Migration function to rename all existing files in Drive based on current sheet data.
+ * Can be triggered via POST { action: 'renameFiles' }
+ */
+function renameAllExistingFiles() {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheets = ['BLO_Account', 'Avihit_Account', 'Supervisor_Account'];
+    let totalRenamed = 0;
+    
+    sheets.forEach(sheetName => {
+      let prefix = 'BLO';
+      if (sheetName.includes('Avihit')) prefix = 'Avihit';
+      if (sheetName.includes('Supervisor')) prefix = 'Supervisor';
+
+      const sheet = ss.getSheetByName(sheetName);
+      if (!sheet) return;
+      
+      const data = sheet.getDataRange().getValues();
+      if (data.length <= 1) return;
+      
+      const headers = data[0].map(h => normalizeHeader(h));
+      
+      const docIdx = headers.indexOf('Account_Passbook_Doc');
+      const acIdx = headers.indexOf('AC_No');
+      const partIdx = headers.indexOf('Part_No');
+      const sectorIdx = headers.indexOf('Sector_No');
+      const mobileIdx = headers.indexOf('Mobile');
+      
+      if (docIdx === -1) return;
+      
+      for (let i = 1; i < data.length; i++) {
+          const docUrl = String(data[i][docIdx]);
+          if (docUrl.includes('drive.google.com')) {
+             try {
+               const fileIdMatch = docUrl.match(/[-\w]{25,}/);
+               if (fileIdMatch) {
+                 const file = DriveApp.getFileById(fileIdMatch[0]);
+                 const acNo = acIdx !== -1 ? String(data[i][acIdx]).trim() : 'NA';
+                 const partNo = (partIdx !== -1 ? String(data[i][partIdx]).trim() : '') || (sectorIdx !== -1 ? String(data[i][sectorIdx]).trim() : '') || 'NA';
+                 const mobile = mobileIdx !== -1 ? String(data[i][mobileIdx]).trim() : 'NA';
+                 
+                 const newName = prefix + "_" + acNo + "_" + partNo + "_" + mobile;
+                 file.setName(newName);
+                 
+                 // Organize into subfolder
+                 const folderName = prefix + "_Accounts";
+                 const targetFolder = getOrCreateSubfolder(DriveApp.getFolderById(TARGET_FOLDER_ID), folderName);
+                 const parents = file.getParents();
+                 while (parents.hasNext()) {
+                   parents.next().removeFile(file);
+                 }
+                 targetFolder.addFile(file);
+                 
+                 totalRenamed++;
+               }
+             } catch (e) {
+               // Skip if file not found or permission issue
+             }
+          }
+      }
+    });
+    return { success: true, message: "Migration completed. Renamed " + totalRenamed + " files." };
+  } catch (error) {
+    return { success: false, error: error.toString() };
+  }
 }

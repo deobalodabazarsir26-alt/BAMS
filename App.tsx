@@ -127,10 +127,10 @@ const App: React.FC = () => {
     }
 
     switch (currentPage) {
-      case 'dashboard': return <Dashboard user={state.currentUser!} accounts={[...state.accounts, ...state.avihitAccounts, ...state.supervisorAccounts]} />;
+      case 'dashboard': return <Dashboard user={state.currentUser!} bloAccounts={state.accounts} avihitAccounts={state.avihitAccounts} supervisorAccounts={state.supervisorAccounts} />;
       case 'consolidated-report': return <ConsolidatedReport user={state.currentUser!} bloAccounts={state.accounts} avihitAccounts={state.avihitAccounts} supervisorAccounts={state.supervisorAccounts} />;
       case 'users': return <UserManagement currentUser={state.currentUser!} users={state.users} onUpdateUser={async (u) => { await updateUserOnSheet(u); await loadData(); }} />;
-      default: return <Dashboard user={state.currentUser!} accounts={[...state.accounts, ...state.avihitAccounts, ...state.supervisorAccounts]} />;
+      default: return <Dashboard user={state.currentUser!} bloAccounts={state.accounts} avihitAccounts={state.avihitAccounts} supervisorAccounts={state.supervisorAccounts} />;
     }
   };
 
