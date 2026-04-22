@@ -24,10 +24,81 @@ const Dashboard: React.FC<DashboardProps> = ({ user, bloAccounts, avihitAccounts
   const [migrationLogs, setMigrationLogs] = useState<MigrationLog[]>([]);
   const [migrationProgress, setMigrationProgress] = useState(0);
 
+  const runMigration = async (itemsToProcess: MigrationLog[]) => {
+    if (itemsToProcess.length === 0) return;
+
+    if (!window.confirm(`Ready to process ${itemsToProcess.length} records. Continue?`)) return;
+    
+    setIsRenaming(true);
+    // If it's a fresh run, set the whole log. If it's a retry, we update existing logs.
+    if (migrationLogs.length === 0 || itemsToProcess.length === migrationLogs.length) {
+      setMigrationLogs(itemsToProcess);
+    } else {
+      setMigrationLogs(prev => prev.map(log => {
+        const toRetry = itemsToProcess.find(it => it.id === log.id);
+        return toRetry ? { ...log, status: 'pending', message: 'Waiting (Retry)' } : log;
+      }));
+    }
+    
+    setMigrationProgress(0);
+
+    const CHUNK_SIZE = 100;
+    
+    for (let i = 0; i < itemsToProcess.length; i += CHUNK_SIZE) {
+      const chunk = itemsToProcess.slice(i, i + CHUNK_SIZE);
+      
+      setMigrationLogs(prev => prev.map(log => 
+        chunk.find(c => c.id === log.id) ? { ...log, status: 'processing', message: 'Processing batch...' } : log
+      ));
+
+      try {
+        const payload = chunk.map(item => {
+          const a = item.data;
+          const partNo = a.Part_No || a.Sector_No || 'NA';
+          const newName = `${item.type}_${a.AC_No}_${partNo}_${a.Mobile}`;
+          return {
+            url: a.Account_Passbook_Doc,
+            newName: newName,
+            id: item.id,
+            type: item.type
+          };
+        });
+
+        const data = await safeFetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'renameBatch', payload: payload })
+        });
+
+        if (data && data.results) {
+          setMigrationLogs(prev => prev.map(log => {
+            const found = data.results.find((r: any) => r.id === log.id);
+            if (found) {
+              return { 
+                ...log, 
+                status: found.success ? 'success' : 'error', 
+                message: found.success ? (found.skipped ? 'Already Sync' : 'Done') : (found.error || 'Failed') 
+              };
+            }
+            return log;
+          }));
+        } else {
+          throw new Error(data?.error || "Batch failed on server");
+        }
+      } catch (e: any) {
+        console.error("Chunk Error:", e);
+        setMigrationLogs(prev => prev.map(log => 
+          chunk.find(c => c.id === log.id) ? { ...log, status: 'error', message: e.message || 'Error' } : log
+        ));
+      }
+
+      setMigrationProgress(Math.round(((i + chunk.length) / itemsToProcess.length) * 100));
+    }
+    
+    setIsRenaming(false);
+  };
+
   const handleRenameExistingFiles = async () => {
     console.log("Migration Button Clicked");
-    
-    // 1. Prepare all items to migrate
     try {
       const allMigrationItems: MigrationLog[] = [
         ...(bloAccounts || []).map(a => ({ id: a.BLO_ID, name: a.BLO_Name, status: 'pending' as const, message: 'Waiting', type: 'BLO', data: a })),
@@ -38,80 +109,26 @@ const Dashboard: React.FC<DashboardProps> = ({ user, bloAccounts, avihitAccounts
         return doc.includes('drive.google.com') || (doc.length > 20 && !doc.includes(' '));
       });
 
-      console.log("Filtered Migration Items:", allMigrationItems.length);
-
       if (allMigrationItems.length === 0) {
         alert("Found 0 files to migrate. Are you sure the accounts have Google Drive links?");
         return;
       }
 
-      if (!window.confirm(`System found ${allMigrationItems.length} files. Start batch processing?`)) {
-        console.log("Migration cancelled by user");
-        return;
-      }
-      
-      setIsRenaming(true);
-      setMigrationLogs(allMigrationItems);
-      setMigrationProgress(0);
-
-      const CHUNK_SIZE = 100;
-      
-      for (let i = 0; i < allMigrationItems.length; i += CHUNK_SIZE) {
-        const chunk = allMigrationItems.slice(i, i + CHUNK_SIZE);
-        console.log(`Processing Chunk ${i / CHUNK_SIZE + 1}, Size: ${chunk.length}`);
-        
-        setMigrationLogs(prev => prev.map(log => 
-          chunk.find(c => c.id === log.id) ? { ...log, status: 'processing', message: 'Processing batch...' } : log
-        ));
-
-        try {
-          const payload = chunk.map(item => {
-            const a = item.data;
-            const partNo = a.Part_No || a.Sector_No || 'NA';
-            const newName = `${item.type}_${a.AC_No}_${partNo}_${a.Mobile}`;
-            return {
-              url: a.Account_Passbook_Doc,
-              newName: newName,
-              id: item.id,
-              type: item.type
-            };
-          });
-
-          const data = await safeFetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'renameBatch', payload: payload })
-          });
-
-          if (data && data.results) {
-            setMigrationLogs(prev => prev.map(log => {
-              const found = data.results.find((r: any) => r.id === log.id);
-              if (found) {
-                return { 
-                  ...log, 
-                  status: found.success ? 'success' : 'error', 
-                  message: found.success ? (found.skipped ? 'Already Sync' : 'Done') : (found.error || 'Failed') 
-                };
-              }
-              return log;
-            }));
-          } else {
-            throw new Error(data?.error || "Batch failed on server");
-          }
-        } catch (e: any) {
-          console.error("Chunk Error:", e);
-          setMigrationLogs(prev => prev.map(log => 
-            chunk.find(c => c.id === log.id) ? { ...log, status: 'error', message: e.message || 'Error' } : log
-          ));
-        }
-
-        setMigrationProgress(Math.round(((i + chunk.length) / allMigrationItems.length) * 100));
-      }
+      await runMigration(allMigrationItems);
     } catch (criticalError: any) {
       console.error("Critical Migration Error:", criticalError);
       alert("Critical Error: " + criticalError.message);
-    } finally {
       setIsRenaming(false);
     }
+  };
+
+  const handleRetryFailed = () => {
+    const failedItems = migrationLogs.filter(log => log.status === 'error');
+    if (failedItems.length === 0) {
+      alert("No failed records found to retry.");
+      return;
+    }
+    runMigration(failedItems);
   };
 
   const allAccounts = [...bloAccounts, ...avihitAccounts, ...supervisorAccounts];
@@ -196,13 +213,24 @@ const Dashboard: React.FC<DashboardProps> = ({ user, bloAccounts, avihitAccounts
                     <div className="fw-bold small">Rename Legacy Files</div>
                     <div className="extra-small text-muted">Update all existing Drive files to the new naming format with progress tracking.</div>
                   </div>
-                  <button 
-                    onClick={handleRenameExistingFiles} 
-                    disabled={isRenaming} 
-                    className="btn btn-outline-primary btn-sm fw-bold"
-                  >
-                    {isRenaming ? <><i className="bi bi-arrow-repeat spin me-2"></i>Processing...</> : 'Start Migration'}
-                  </button>
+                  <div className="d-flex gap-2">
+                    {migrationLogs.some(log => log.status === 'error') && !isRenaming && (
+                      <button 
+                        onClick={handleRetryFailed} 
+                        className="btn btn-warning btn-sm fw-bold shadow-sm"
+                      >
+                        <i className="bi bi-arrow-clockwise me-1"></i>
+                        Retry Failed
+                      </button>
+                    )}
+                    <button 
+                      onClick={handleRenameExistingFiles} 
+                      disabled={isRenaming} 
+                      className="btn btn-outline-primary btn-sm fw-bold"
+                    >
+                      {isRenaming ? <><i className="bi bi-arrow-repeat spin me-2"></i>Processing...</> : 'Start Migration'}
+                    </button>
+                  </div>
                 </div>
 
                 {isRenaming && (
