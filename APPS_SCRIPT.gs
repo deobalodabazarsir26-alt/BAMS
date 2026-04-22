@@ -203,8 +203,10 @@ function updateRecord(sheetName, idColumnName, idValue, updateObj) {
                const mobile = updateObj['Mobile'] || getSheetValue(data[i], headers, 'Mobile') || 'NA';
                
                const newFileName = prefix + "_" + acNo + "_" + partNo + "_" + mobile;
+               const searchPrefix = prefix + "_" + acNo + "_" + partNo + "_";
                const folderName = prefix + "_Accounts";
-               val = uploadBase64ToDrive(val, newFileName, folderName) || val;
+               const oldUrl = data[i][colIndex];
+               val = uploadBase64ToDrive(val, newFileName, folderName, oldUrl, searchPrefix) || val;
             }
             
             sheet.getRange(i + 1, colIndex + 1).setValue(val);
@@ -219,8 +221,21 @@ function updateRecord(sheetName, idColumnName, idValue, updateObj) {
   }
 }
 
-function uploadBase64ToDrive(base64Data, fileName, subfolderName) {
+function uploadBase64ToDrive(base64Data, fileName, subfolderName, oldUrl, searchPrefix) {
   try {
+    // 1. Cleanup old file specifically referenced in the record (if updating)
+    if (oldUrl && String(oldUrl).includes('drive.google.com')) {
+       try {
+         const oldFileIdMatch = String(oldUrl).match(/[-\w]{25,}/);
+         if (oldFileIdMatch) {
+            const oldFile = DriveApp.getFileById(oldFileIdMatch[0]);
+            oldFile.setTrashed(true);
+         }
+       } catch (e) {
+         // Ignore if old file not found or already deleted
+       }
+    }
+
     const parts = base64Data.split(',');
     if (parts.length < 2) return null;
     const mimeType = parts[0].match(/:(.*?);/)[1];
@@ -232,6 +247,28 @@ function uploadBase64ToDrive(base64Data, fileName, subfolderName) {
     
     if (subfolderName) {
       targetFolder = getOrCreateSubfolder(parentFolder, subfolderName);
+    }
+
+    // 2. Prevent Duplicate Files based on AC_No and Part_No
+    // If searchPrefix is provided (e.g., "BLO_123_45_"), find and delete all files matching it
+    if (searchPrefix) {
+      const files = targetFolder.getFiles();
+      while (files.hasNext()) {
+        const file = files.next();
+        if (file.getName().startsWith(searchPrefix)) {
+          try {
+            file.setTrashed(true);
+          } catch(e) {}
+        }
+      }
+    } else {
+      // Fallback: Delete just by exact name if no prefix logic provided
+      const existingFiles = targetFolder.getFilesByName(fileName);
+      while (existingFiles.hasNext()) {
+        try {
+          existingFiles.next().setTrashed(true);
+        } catch (e) {}
+      }
     }
 
     const file = targetFolder.createFile(blob);
@@ -270,8 +307,9 @@ function addRecord(sheetName, recordObj) {
       const mobile = recordObj['Mobile'] || 'NA';
       
       const fileName = prefix + "_" + acNo + "_" + partNo + "_" + mobile;
+      const searchPrefix = prefix + "_" + acNo + "_" + partNo + "_";
       const folderName = prefix + "_Accounts";
-      recordObj['Account_Passbook_Doc'] = uploadBase64ToDrive(recordObj['Account_Passbook_Doc'], fileName, folderName) || recordObj['Account_Passbook_Doc'];
+      recordObj['Account_Passbook_Doc'] = uploadBase64ToDrive(recordObj['Account_Passbook_Doc'], fileName, folderName, null, searchPrefix) || recordObj['Account_Passbook_Doc'];
     }
 
     for (let key in recordObj) {
